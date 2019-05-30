@@ -6,10 +6,17 @@ namespace Daedalus.Utilities
 {
     public class StreamIO
     {
+        Encoding encoding = Encoding.Default;
         MemoryStream ms;
         byte[] buffer = new byte[default(int)];
 
         public StreamIO() { ms = new MemoryStream(); }
+
+        public StreamIO(Encoding encoding)
+        {
+            this.encoding = encoding;
+            ms = new MemoryStream();
+        }
 
         public StreamIO(MemoryStream ms)
         {
@@ -18,10 +25,26 @@ namespace Daedalus.Utilities
 
         public StreamIO(byte[] buffer) { ms = new MemoryStream(buffer, 0, buffer.Length, true); }
 
+        public StreamIO(byte[] buffer, Encoding encoding)
+        {
+            this.encoding = encoding;
+            ms = new MemoryStream(buffer, 0, buffer.Length, true);
+        }
+
         public StreamIO(string path, FileMode fileMode, FileAccess fileAccess)
         {
             if (File.Exists(path))
                 ms = new MemoryStream(FileIO.ReadAllBytes(path), true);
+            else
+                throw new FileNotFoundException("Daedalus.Utilities.StreamIO cannot initialize because the file cannot be found at path", path);
+        }
+
+        public StreamIO(string path, FileMode fileMode, FileAccess fileAccess, Encoding encoding)
+        {
+            if (File.Exists(path))
+                ms = new MemoryStream(FileIO.ReadAllBytes(path), true);
+            else
+                throw new FileNotFoundException("Daedalus.Utilities.StreamIO cannot initialize because the file cannot be found at path", path);
         }
 
         public void Clear()
@@ -209,7 +232,7 @@ namespace Daedalus.Utilities
             buffer = new byte[length];
             ms.Read(buffer, 0, buffer.Length);
 
-            return ByteConverterExt.ToString(buffer, Encoding.Default); //TODO fetch proper encoding
+            return ByteConverterExt.ToString(buffer, encoding);
         }
 
         #endregion

@@ -146,7 +146,7 @@ namespace Daedalus.Utilities
                 Cell field = new Cell();
 
                 field.Name = fieldT.Get(1).String;
-                field.Type = (CellType)fieldT.Get(2).Number; //TODO: Length will be determined by type
+                field.Type = (CellType)fieldT.Get(2).Number;
                 field.Length = (int)fieldT.Get("length").Number;
                 field.Dependency = fieldT.Get("dependency").String;
                 field.Default = (object)fieldT.Get("default").ToObject();

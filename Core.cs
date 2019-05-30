@@ -191,7 +191,7 @@ namespace Daedalus
         public void Write()
         {
             if (sHelper == null) // If data was loaded from SQL
-                sHelper = new StreamIO();
+                sHelper = new StreamIO(encoding);
             else
                 sHelper.Clear();
 
@@ -403,13 +403,15 @@ namespace Daedalus
 
                 switch (cell.Type)
                 {
-                    case CellType.TYPE_INT_16:
+                    case CellType.TYPE_SHORT:
                         goto case CellType.TYPE_SHORT;
 
-                    case CellType.TYPE_SHORT:
-
+                    case CellType.TYPE_INT_16:
                         row[c] = sHelper.ReadInt16;
                         break;
+
+                    case CellType.TYPE_USHORT:
+                        goto case CellType.TYPE_UINT_16;
 
                     case CellType.TYPE_UINT_16:
                         row[c] = sHelper.ReadUInt16;
@@ -422,9 +424,15 @@ namespace Daedalus
                         row[c] = sHelper.ReadInt32;
                         break;
 
+                    case CellType.TYPE_UINT:
+                        goto case CellType.TYPE_UINT_32;
+
                     case CellType.TYPE_UINT_32:
                         row[c] = sHelper.ReadUInt32;
                         break;
+
+                    case CellType.TYPE_INT_64:
+                        goto case CellType.TYPE_LONG;
 
                     case CellType.TYPE_LONG:
                         row[c] = sHelper.ReadInt64;
@@ -464,9 +472,15 @@ namespace Daedalus
                     case CellType.TYPE_FLOAT:
                         goto case CellType.TYPE_SINGLE;
 
+                    case CellType.TYPE_FLOAT_32:
+                        goto case CellType.TYPE_SINGLE;
+
                     case CellType.TYPE_SINGLE:
                         row[c] = sHelper.ReadSingle;
                         break;
+
+                    case CellType.TYPE_FLOAT_64:
+                        goto case CellType.TYPE_SINGLE;
 
                     case CellType.TYPE_DOUBLE:
                         row[c] = sHelper.ReadDouble;
@@ -479,7 +493,8 @@ namespace Daedalus
 
                     case CellType.TYPE_STRING:
                         {
-                            row[c] = ByteConverterExt.ToString(sHelper.ReadBytes(cell.Length), Encoding.Default);
+                            row[c] = ByteConverterExt.ToString(sHelper.ReadBytes(cell.Length), 
+                                                                            Encoding.Default);
                         }
                         break;
 
@@ -530,6 +545,9 @@ namespace Daedalus
                         }
                         break;
 
+                    case CellType.TYPE_USHORT:
+                        goto case CellType.TYPE_UINT_16;
+
                     case CellType.TYPE_UINT_16:
                         {
                             ushort s = row[c] as ushort? ?? default(ushort);
@@ -553,6 +571,9 @@ namespace Daedalus
                             sHelper.WriteUInt32(i);
                         }
                         break;
+
+                    case CellType.TYPE_INT_64:
+                        goto case CellType.TYPE_LONG;
 
                     case CellType.TYPE_LONG:
                         {
@@ -598,12 +619,18 @@ namespace Daedalus
                     case CellType.TYPE_FLOAT:
                         goto case CellType.TYPE_SINGLE;
 
+                    case CellType.TYPE_FLOAT_32:
+                        goto case CellType.TYPE_SINGLE;
+
                     case CellType.TYPE_SINGLE:
                         {
                             float s = row[c] as float? ?? default(float);
                             sHelper.WriteSingle(s);
                         }
                         break;
+
+                    case CellType.TYPE_FLOAT_64:
+                        goto case CellType.TYPE_DOUBLE;
 
                     case CellType.TYPE_DOUBLE:
                         {

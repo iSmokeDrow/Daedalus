@@ -26,7 +26,7 @@
         TYPE_STRING = 21,
         TYPE_STRING_BY_LEN = 22,
         TYPE_STRING_BY_HEADER_REF = 23,
-        TYPE_STRING_BY_REF = 24, //TODO: Implement me
+        TYPE_STRING_BY_REF = 24,
         TYPE_STRING_LEN = 25
     }
 }
