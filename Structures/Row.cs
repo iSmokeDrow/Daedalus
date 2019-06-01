@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Text;
 using Daedalus.Enums;
 
@@ -116,6 +116,59 @@ namespace Daedalus.Structures
             return null;
         }
 
+        public Cell[] GetBitFields(string fieldName)
+        {
+            Cell[] fields = new Cell[bitField_length];
+            int fPos = 0;
+
+            for (int i = 0; i < cells.Length; i++)
+            {
+                Cell c = cells[i];
+
+                if (c.Dependency == fieldName)
+                {
+                    fields[fPos] = c;
+                    fPos++;
+                }
+            }
+
+            return fields;
+        }
+
+        public BitVector32 GetBitVector(string name)
+        {
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i].Type == CellType.TYPE_BIT_VECTOR)
+                    return cells[i].Value as BitVector32? ?? default(BitVector32);
+            }
+
+            return new BitVector32(0);
+        }
+
+        public Cell[] BitFields
+        {
+            get
+            {
+                Cell[] fields = new Cell[bitField_length];
+                int fPos = 0;
+
+                if (fields.Length == 0)
+                    return null;
+
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (cells[i].Type == CellType.TYPE_BIT_FROM_VECTOR)
+                    {
+                        fields[fPos] = cells[i];
+                        fPos++;
+                    }
+                }
+
+                return fields;
+            }
+        }
+
         public string[] ColumnNames
         {
             get
@@ -152,6 +205,22 @@ namespace Daedalus.Structures
 
             for (int i = 0; i < output.Length; i++)
                 output[i] = cells[i].Value;
+        }
+
+        int bitField_length
+        {
+            get
+            {
+                int o = 0;
+
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (cells[i].Type == CellType.TYPE_BIT_FROM_VECTOR)
+                        o++;
+                }
+
+                return o;
+            }
         }
 
     }

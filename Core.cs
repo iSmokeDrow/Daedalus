@@ -61,7 +61,7 @@ namespace Daedalus
                 if (headerType == HeaderType.Defined)
                     v = dHeader.GetValueByFlag(FlagType.ROW_COUNT) as int? ?? default(int);
                 else
-                    v = (rows != null) ? rows.Length : tHeader.RowCount;
+                    v = tHeader.RowCount;
 
                 return v;
             }
@@ -206,7 +206,8 @@ namespace Daedalus
 
         public void SetData(Row[] rows)
         {
-            this.rows = rows;
+            tHeader.RowCount = rows.Length;
+            this.rows = rows;           
         }
 
         #endregion
@@ -601,7 +602,7 @@ namespace Daedalus
 
                     case CellType.TYPE_BIT_VECTOR:
                         {
-                            int i = row[c] as int? ?? default(int);
+                            int i = BitConverter.ToInt32(generateBitVector(row, cell.Name), 0);
                             sHelper.WriteInt32(i);
                         }
                         break;
@@ -765,6 +766,15 @@ namespace Daedalus
 
             sqlCmd.CommandText = string.Format("INSERT INTO <tableName> ({0}) VALUES ({1})", columns.Remove(columns.Length - 1, 1), parameters.Remove(parameters.Length - 1, 1));
             return sqlCmd;
+        }
+
+        byte[] generateBitVector(Row row, string fieldName)
+        {
+            Cell[] cells = row.GetBitFields(fieldName);
+            BitVector32 bitVector = row.GetBitVector(fieldName);
+
+            foreach (Cell cell in cells) { bitVector[1 << cell.Position] = Convert.ToBoolean(cell.Value); }
+            return BitConverter.GetBytes(bitVector.Data);
         }
 
         #endregion

@@ -7,7 +7,7 @@
     <StartupObject />
     <Description>Structure based RDB editing api</Description>
     <Company>Smokey Software</Company>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <AssemblyVersion>0.1.0.3</AssemblyVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
