@@ -5,23 +5,43 @@ using Daedalus.Enums;
 
 namespace Daedalus.Structures
 {
+    /// <summary>
+    /// Storage medium for a 'row' of data loaded from an .rdb file
+    /// </summary>
     public struct Row
     {
         readonly Cell[] cells;
 
+        /// <summary>
+        /// Instantiate the Row with provided cells
+        /// </summary>
+        /// <param name="cells">template containing a per cell schematic (MAY contain values)</param>
         public Row(Cell[] cells) { this.cells = cells; }
 
+        /// <summary>
+        /// Length of the cells collection
+        /// </summary>
         public int Length
         {
             get { return cells.Length; }
         }
 
+        /// <summary>
+        /// Cell property access, gets and sets the cells[idx].Value
+        /// </summary>
+        /// <param name="idx">Index of the desired cell element</param>
+        /// <returns>cells[idx].Value</returns>
         public object this[int idx]
         {
             get { return cells[idx].Value; }
             set { cells[idx].Value = value; }
         }
 
+        /// <summary>
+        /// CEll property access, gets and sets the cell[key].Value
+        /// </summary>
+        /// <param name="key">Strongly Typed name of the desired cell element</param>
+        /// <returns>cells[key].Value</returns>
         public object this[string key]
         {
             get
@@ -44,11 +64,43 @@ namespace Daedalus.Structures
             }
         }
 
+        public object this[FlagType flag]
+        {
+            get
+            {
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (cells[i].Flag == flag)
+                        return cells[i].Value;
+                }
+
+                return null;
+            }
+            set
+            {
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (cells[i].Flag == flag)
+                        cells[i].Value = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get a cell from the cells[] collection by its ordinal position.
+        /// </summary>
+        /// <param name="index">Index of the desired cell element</param>
+        /// <returns>Cell at given index</returns>
         public Cell GetCell(int index)
         {
             return cells[index];
         }
 
+        /// <summary>
+        /// Gets a cell from the cells[] collection by its key<->name value
+        /// </summary>
+        /// <param name="key">Name of the desired cell</param>
+        /// <returns>First Cell elementing with Name == key</returns>
         public Cell GetCell(string key)
         {
             for (int i = 0; i < cells.Length; i++)
@@ -60,6 +112,11 @@ namespace Daedalus.Structures
             throw new Exception(string.Format("Cell with key: {0} does not exist in cells!", key));
         }
 
+        /// <summary>
+        /// Gets the first Cell.Value object bearing the given flag
+        /// </summary>
+        /// <param name="flag">Desired FlagType</param>
+        /// <returns>Object representing Cell.Value</returns>
         public object GetValueByFlag(FlagType flag)
         {
             for (int i = 0; i < cells.Length; i++)
@@ -71,6 +128,11 @@ namespace Daedalus.Structures
             return null;
         }
 
+        /// <summary>
+        /// Gets the first Cell.Value object bearing the given type
+        /// </summary>
+        /// <param name="type">Desired CellType</param>
+        /// <returns>Object representing Cell.Value</returns>
         public object GetValueByCellType(CellType type)
         {
             for (int i = 0; i < cells.Length; i++)
@@ -82,12 +144,17 @@ namespace Daedalus.Structures
             return null;
         }
 
+        /// <summary>
+        /// Gets the first Cell.Name string whose element bears the given flag
+        /// </summary>
+        /// <param name="flag">Desired FlagType</param>
+        /// <returns>String representing the desired Cell.Name</returns>
         public string GetNameByFlag(FlagType flag)
         {
             for (int i = 0; i < cells.Length; i++)
             {
                 if (cells[i].Flag == flag)
-                    return cells[i].Value.ToString();
+                    return cells[i].Name;
             }
 
             return null;

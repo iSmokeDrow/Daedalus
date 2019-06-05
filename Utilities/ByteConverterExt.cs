@@ -3,9 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Daedalus.Structures;
 
 namespace Daedalus.Utilities
 {
+    public class ByteHelper
+    {
+        public static void ExpandArray(ref Row[] array, int count)
+        {
+            int startSize = array.Length;
+            int endSize = startSize + count;
+            Array.Resize(ref array, endSize);
+        }
+    }
+
     public class ByteConverterExt
     {
         public static decimal ByteArrayToDecimal(byte[] src, int offset)

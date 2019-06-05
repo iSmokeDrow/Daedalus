@@ -10,6 +10,9 @@ using Daedalus.Utilities;
 
 namespace Daedalus
 {
+    /// <summary>
+    /// Provides low level access and manipulation of Rappelz .rdb data storage mediums
+    /// </summary>
     public class Core
     {
         #region Private fields
@@ -42,54 +45,88 @@ namespace Daedalus
 
         #region Public fields
 
+        /// <summary>
+        /// Collection of cell information (no values)
+        /// </summary>
         public Cell[] CellTemplate
         {
             get { return (Cell[])row_Template.Clone(); }
         }
 
+        /// <summary>
+        /// Amount of Cells contained in the row_Template
+        /// </summary>
         public int CellCount
         {
             get { return row_Template.Length; }
         }
 
+        /// <summary>
+        /// Amount of Row[] being stored in rows
+        /// </summary>
         public int RowCount
         {
             get
             {
-                int v = 0;
-
                 if (headerType == HeaderType.Defined)
-                    v = dHeader.GetValueByFlag(FlagType.ROW_COUNT) as int? ?? default(int);
+                    return dHeader.GetValueByFlag(FlagType.ROW_COUNT) as int? ?? default(int);
                 else
-                    v = tHeader.RowCount;
+                {
+                    if (rows != null  && tHeader.RowCount < rows.Length)
+                        tHeader.RowCount = rows.Length;
 
-                return v;
+                    return tHeader.RowCount;
+                }
+            }
+            set
+            {
+                if (headerType == HeaderType.Defined)
+                    dHeader[FlagType.ROW_COUNT] = value;
+                else
+                    tHeader.RowCount = value;
             }
         }
 
+        /// <summary>
+        /// Collection of loaded Rows
+        /// </summary>
         public Row[] Rows
         {
             get { return rows; }
             set { rows = value; }
         }
 
+        /// <summary>
+        /// Returns stored row at the provided index or null
+        /// </summary>
+        /// <param name="index">Zero-based ordinal location of the desired Row</param>
+        /// <returns>Row object from rows[index] or null</returns>
         public Row this[int index]
         {
             get { return rows[index]; }
         }
 
+        /// <summary>
+        /// Physical path to the LUA file containing structure definitions
+        /// </summary>
         public string LuaPath
         {
             get { return luaPath ?? null; }
             set { luaPath = value; }
         }
 
+        /// <summary>
+        /// Physical path to the RDB file containing the data
+        /// </summary>
         public string RdbPath
         {
             get { return rdbPath ?? null; }
             set { rdbPath = value; }
         }
 
+        /// <summary>
+        /// Filename (including extension) of the targeted RDB
+        /// </summary>
         public string FileName
         {
             get
@@ -101,26 +138,41 @@ namespace Daedalus
             }
         }
 
+        /// <summary>
+        /// Name of the target Database table
+        /// </summary>
         public string TableName
         {
             get { return lua.TableName; }
         }
 
+        /// <summary>
+        /// Blank Insert statement for use in inserting information from the RDB to SQL table.
+        /// </summary>
         public SqlCommand InsertStatement
         {
             get { return generateInsert(); }
         }
 
+        /// <summary>
+        /// Determines if the user has defined a Select statement for reading information from an SQL table.
+        /// </summary>
         public bool UseSelectStatement
         {
             get { return lua.UseSelectStatement; }
         }
 
+        /// <summary>
+        /// User defined Select statement from the lua structure.
+        /// </summary>
         public string SelectStatement
         {
             get { return lua.SelectStatement; }
         }
 
+        /// <summary>
+        /// All Column Names in the row_Template
+        /// </summary>
         public string[] ColumnNames
         {
             get
@@ -136,8 +188,17 @@ namespace Daedalus
 
         #region Constructors
 
+        /// <summary>
+        /// Dummy constructor
+        /// </summary>
         public Core() { }
 
+        /// <summary>
+        /// Initialize the core with paths and encoding
+        /// </summary>
+        /// <param name="luaPath">Physical path to the lua structure file</param>
+        /// <param name="rdbPath">Physical path to the rdb data file</param>
+        /// <param name="encoding">Encoding which to read and write strings</param>
         public Core(string luaPath, string rdbPath, Encoding encoding)
         {
             this.luaPath = luaPath;
@@ -145,6 +206,11 @@ namespace Daedalus
             this.encoding = encoding;
         }
 
+        /// <summary>
+        /// Initialize the core with paths
+        /// </summary>
+        /// <param name="luaPath">Physical path to the lua structure file</param>
+        /// <param name="rdbPath">Physical path to the rdb data file</param>
         public Core(string luaPath, string rdbPath)
         {
             this.luaPath = luaPath;
@@ -171,6 +237,9 @@ namespace Daedalus
 
         #region Public methods
 
+        /// <summary>
+        /// Initialize the script engine by iterating to lua structure file
+        /// </summary>
         public void Initialize()
         {
             lua = new LUA(FileIO.ReadAllText(luaPath));
@@ -181,6 +250,10 @@ namespace Daedalus
             row_Template = lua.GetFieldList("fields");
         }
 
+        /// <summary>
+        /// Process the data stored in a RDB buffer.
+        /// </summary>
+        /// <param name="buffer">Buffer to be processed</param>
         public void ParseBuffer(byte[] buffer)
         {
             sHelper = new StreamIO(buffer);
@@ -188,6 +261,9 @@ namespace Daedalus
             parseContents();
         }
 
+        /// <summary>
+        /// Write the data in the loaded rows to disk.
+        /// </summary>
         public void Write()
         {
             if (sHelper == null) // If data was loaded from SQL
@@ -199,11 +275,19 @@ namespace Daedalus
             writeContents();
         }
 
+        /// <summary>
+        /// Define the Encoding which strings will be processed by
+        /// </summary>
+        /// <param name="encoding">Encoding for string processing</param>
         public void SetEncoding(Encoding encoding)
         {
             this.encoding = encoding;
         }
 
+        /// <summary>
+        /// Replaces stored rows object with provided rows object
+        /// </summary>
+        /// <param name="rows">Row[] object to be stored</param>
         public void SetData(Row[] rows)
         {
             tHeader.RowCount = rows.Length;
@@ -248,24 +332,28 @@ namespace Daedalus
                 {
                     case SpecialCase.DOUBLE_LOOP:
 
+                        List<Row> tRows = new List<Row>();
+
                         for (int r = 0; r < RowCount; r++)
                         {
-                            Row row = new Row(CellTemplate);
-                            int loopCount = sHelper.ReadInt32;
+                            int l = sHelper.ReadInt32;
 
-                            for (int l = 0; l < loopCount; l++)
+                            for (int i = 0; i < l; i++)
                             {
+                                Row row = new Row(CellTemplate);
                                 populateRow(ref row, SenderType.PARSE_ROW);
 
                                 if (lua.UseRowProcessor)
                                     lua.CallRowProcessor(FileMode.Read, row, r);
 
-                                rows[r] = row;
+                                tRows.Add(row);
 
                                 if ((r * 100 / RowCount) != ((r - 1) * 100 / RowCount))
-                                    OnProgressValueChanged(new ProgressValueArgs(r));
+                                    OnProgressValueChanged(new ProgressValueArgs(r)); 
                             }
                         }
+
+                        rows = tRows.ToArray();
 
                         break;
                 }
@@ -300,8 +388,36 @@ namespace Daedalus
                                                                 DateTime.Now.Month.ToString("D2"),
                                                                 DateTime.Now.Day.ToString("D2"));
                     sHelper.WriteBytes(ByteConverterExt.ToBytes(newDate, Encoding.Default));
-                    sHelper.WriteString(" Daedalus 1.0", 120);
-                    sHelper.WriteInt32(RowCount);
+                    sHelper.WriteString(string.Format("........RDB Written with Daedalus v{0} by iSmokeDrow.",
+                    System.Diagnostics.FileVersionInfo.GetVersionInfo("Daedalus.dll").FileVersion.Remove(0,2)),
+                                                                                                          120);
+
+                    if (lua.SpecialCase)
+                    {
+                        switch (lua.Case)
+                        {
+                            case SpecialCase.DOUBLE_LOOP:
+                                int pVal = 0;
+                                int lCount = 0;
+
+                                for (int r = 0; r < RowCount; r++)
+                                {
+                                    int cVal = (int)rows[r].GetValueByFlag(FlagType.LOOP_COUNTER);
+
+                                    if (pVal != cVal)
+                                    {
+                                        pVal = cVal;
+                                        lCount++;
+                                    }
+                                }
+
+                                sHelper.WriteInt32(lCount);
+                                break;
+                        }
+                    }
+                    else
+                        sHelper.WriteInt32(RowCount);
+
                     break;
 
                 case HeaderType.Defined:
@@ -320,28 +436,30 @@ namespace Daedalus
                 {
                     case SpecialCase.DOUBLE_LOOP:
 
-                        int previousVal = 0;
+                        int pVal = 0;
 
-                        for (int r = 0; r < RowCount; r++)
+                        for (int rowIdx = 0; rowIdx < RowCount; rowIdx++)
                         {
-                            Row row = rows[r];
-                            int currentVal = row.GetValueByFlag(FlagType.LOOP_COUNTER) as int? ?? default(int);
+                            Row row = rows[rowIdx];
+                            int cVal = (int)row.GetValueByFlag(FlagType.LOOP_COUNTER);
 
-                            if (previousVal != currentVal)
+                            if (pVal != cVal)
                             {
                                 string counterName = row.GetNameByFlag(FlagType.LOOP_COUNTER);
-                                int count = getMatchCount(counterName, currentVal);
+                                Row[] treeRows = FindAll(counterName, cVal);
 
-                                sHelper.WriteInt32(count);
+                                sHelper.WriteInt32(treeRows.Length);
 
-                                for (int i = 0; i < count; i++)
-                                    writeRow(row, SenderType.WRITE_ROW);
+                                for (int tR = 0; tR < treeRows.Length; tR++)
+                                {
+                                    if (lua.UseRowProcessor)
+                                        lua.CallRowProcessor("write", rows[tR], rowIdx);
 
-                                previousVal = currentVal;
+                                    writeRow(treeRows[tR], SenderType.WRITE_ROW);
+                                }
+
+                                pVal = cVal;
                             }
-
-                            if (((r * 100) / RowCount) != ((r - 1) * 100 / RowCount))
-                                OnProgressValueChanged(new ProgressValueArgs(r));
                         }
 
                         break;
@@ -375,24 +493,6 @@ namespace Daedalus
             OnProgressMaxChanged(new ProgressMaxArgs(100));
             OnProgressValueChanged(new ProgressValueArgs(0));
         }
-
-        int getMatchCount(string key, object value)
-        {
-            int c = 0;
-
-            for (int r = 0; r < RowCount; r++)
-            {
-                Row row = rows[r];
-                var v = row[key];
-
-                if (v == value)
-                    c++;
-            }
-
-            return c;
-        }
-
-        #region Common
 
         private void populateRow(ref Row row, SenderType sender)
         {
@@ -671,6 +771,38 @@ namespace Daedalus
             }
         }
 
+        int getMatchCount(string key, object value)
+        {
+            int c = 0;
+
+            for (int r = 0; r < RowCount; r++)
+            {
+                Row row = rows[r];
+                var v = row[key];
+
+                if ((int)v == (int)value)
+                    c++;
+            }
+
+            return c;
+        }
+
+        public Row[] FindAll(string key, int value)
+        {
+            List<Row> results = new List<Row>();
+
+            for (int r = 0; r < rows.Length; r++)
+            {
+                Row row = rows[r];
+                Cell cell = row.GetCell(key);
+
+                if ((int)cell.Value == value)
+                    results.Add(row);
+            }
+
+            return results.ToArray();
+        }
+
         private SqlCommand generateInsert()
         {
             SqlCommand sqlCmd = new SqlCommand();
@@ -773,14 +905,17 @@ namespace Daedalus
             Cell[] cells = row.GetBitFields(fieldName);
             BitVector32 bitVector = row.GetBitVector(fieldName);
 
-            foreach (Cell cell in cells) { bitVector[1 << cell.Position] = Convert.ToBoolean(cell.Value); }
+            foreach (Cell cell in cells)
+                bitVector[1 << cell.Position] = Convert.ToBoolean(cell.Value);
+
             return BitConverter.GetBytes(bitVector.Data);
         }
 
         #endregion
 
-        #endregion
-
+        /// <summary>
+        /// Clear the stored rows.
+        /// </summary>
         public void ClearData()
         {
             rows = new Row[0];

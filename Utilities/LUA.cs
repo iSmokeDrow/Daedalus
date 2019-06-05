@@ -151,7 +151,8 @@ namespace Daedalus.Utilities
                 field.Dependency = fieldT.Get("dependency").String;
                 field.Default = (object)fieldT.Get("default").ToObject();
                 field.Position = (int)fieldT.Get("bit_position").Number;
-                field.Flag = (FlagType)fieldT.Get("flag").Number;
+                int fVal = Convert.ToInt32(fieldT["flag"]);
+                field.Flag = (FlagType)fVal;
                 field.Visible = (fieldT.Get("show").ToObject() != null) ? Convert.ToBoolean(fieldT.Get("show").Number) : true;
 
                 fields[tIdx - 1] = field;
