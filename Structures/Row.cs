@@ -103,6 +103,9 @@ namespace Daedalus.Structures
         /// <returns>First Cell elementing with Name == key</returns>
         public Cell GetCell(string key)
         {
+            if (key == null)
+                throw new Exception("key is null!");
+
             for (int i = 0; i < cells.Length; i++)
             {
                 if (cells[i].Name == key)

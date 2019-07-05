@@ -46,11 +46,19 @@ namespace Daedalus
         #region Public fields
 
         /// <summary>
-        /// Collection of cell information (no values)
+        /// Collection of cell information for the row template
         /// </summary>
         public Cell[] CellTemplate
         {
             get { return (Cell[])row_Template.Clone(); }
+        }
+
+        /// <summary>
+        /// Collection of cell information for defined header
+        /// </summary>
+        public Cell[] HeaderTemplate
+        {
+            get { return (Cell[])dHeader_Template.Clone(); }
         }
 
         /// <summary>
@@ -171,9 +179,9 @@ namespace Daedalus
         }
 
         /// <summary>
-        /// All Column Names in the row_Template
+        /// All cell names in the row_Template
         /// </summary>
-        public string[] ColumnNames
+        public string[] CellNames
         {
             get
             {
@@ -809,7 +817,7 @@ namespace Daedalus
             string columns = string.Empty;
             string parameters = string.Empty;
 
-            string[] names = (lua.UseSqlColumns) ? lua.SqlColumns : ColumnNames;
+            string[] names = (lua.UseSqlColumns) ? lua.SqlColumns : CellNames;
             int len = names.Length;
 
             OnProgressMaxChanged(new ProgressMaxArgs(len));
@@ -817,80 +825,86 @@ namespace Daedalus
             for (int c = 0; c < len; c++)
             {
                 string val = names[c];
-                Cell cell = (Cell)rows[0][val];
+                Cell cell = (Cell)rows[0].GetCell(val);
                 CellType columnType = cell.Type;
 
-                columns += string.Format("{0}{1},", val, string.Empty);
-                parameters += string.Format("@{0}{1},", val, string.Empty);
-                SqlDbType paramType = SqlDbType.Int;
-
-                switch (columnType)
+                if (cell.Visible)
                 {
-                    case CellType.TYPE_SHORT:
-                        goto case CellType.TYPE_INT_16;
+                    columns += string.Format("[{0}]{1},", val, string.Empty);
+                    parameters += string.Format("@{0}{1},", val, string.Empty);
+                    SqlDbType paramType = SqlDbType.Int;
 
-                    case CellType.TYPE_INT_16:
-                        paramType = SqlDbType.SmallInt;
-                        break;
+                    switch (columnType)
+                    {
+                        case CellType.TYPE_SHORT:
+                            goto case CellType.TYPE_INT_16;
 
-                    case CellType.TYPE_USHORT:
-                        goto case CellType.TYPE_INT_16;
+                        case CellType.TYPE_INT_16:
+                            paramType = SqlDbType.SmallInt;
+                            break;
 
-                    case CellType.TYPE_UINT_16:
-                        goto case CellType.TYPE_INT_16;
+                        case CellType.TYPE_USHORT:
+                            goto case CellType.TYPE_INT_16;
 
-                    case CellType.TYPE_INT:
-                        goto case CellType.TYPE_INT_32;
+                        case CellType.TYPE_UINT_16:
+                            goto case CellType.TYPE_INT_16;
 
-                    case CellType.TYPE_INT_32:
-                        paramType = SqlDbType.Int;
-                        break;
+                        case CellType.TYPE_INT:
+                            goto case CellType.TYPE_INT_32;
 
-                    case CellType.TYPE_UINT:
-                        goto case CellType.TYPE_INT_32;
+                        case CellType.TYPE_INT_32:
+                            paramType = SqlDbType.Int;
+                            break;
 
-                    case CellType.TYPE_UINT_32:
-                        goto case CellType.TYPE_INT_32;
+                        case CellType.TYPE_UINT:
+                            goto case CellType.TYPE_INT_32;
 
-                    case CellType.TYPE_INT_64:
-                        paramType = SqlDbType.BigInt;
-                        break;
+                        case CellType.TYPE_UINT_32:
+                            goto case CellType.TYPE_INT_32;
 
-                    case CellType.TYPE_LONG:
-                        goto case CellType.TYPE_INT_64;
+                        case CellType.TYPE_INT_64:
+                            paramType = SqlDbType.BigInt;
+                            break;
 
-                    case CellType.TYPE_BYTE:
-                        paramType = SqlDbType.TinyInt;
-                        break;
+                        case CellType.TYPE_LONG:
+                            goto case CellType.TYPE_INT_64;
 
-                    case CellType.TYPE_DATETIME:
-                        paramType = SqlDbType.DateTime;
-                        break;
+                        case CellType.TYPE_BYTE:
+                            paramType = SqlDbType.TinyInt;
+                            break;
 
-                    case CellType.TYPE_DECIMAL:
-                        paramType = SqlDbType.Decimal;
-                        break;
+                        case CellType.TYPE_DATETIME:
+                            paramType = SqlDbType.DateTime;
+                            break;
 
-                    case CellType.TYPE_SINGLE:
-                        paramType = SqlDbType.Real;
-                        break;
+                        case CellType.TYPE_DECIMAL:
+                            paramType = SqlDbType.Decimal;
+                            break;
 
-                    case CellType.TYPE_DOUBLE:
-                        paramType = SqlDbType.Float;
-                        break;
+                        case CellType.TYPE_FLOAT: case CellType.TYPE_FLOAT_32:
+                            goto case CellType.TYPE_SINGLE;
 
-                    case CellType.TYPE_STRING:
-                        paramType = SqlDbType.VarChar;
-                        break;
+                        case CellType.TYPE_SINGLE:
+                            paramType = SqlDbType.Real;
+                            break;
 
-                    case CellType.TYPE_STRING_BY_REF:
-                        paramType = SqlDbType.VarChar;
-                        break;
+                        case CellType.TYPE_DOUBLE:
+                            paramType = SqlDbType.Float;
+                            break;
+
+                        case CellType.TYPE_STRING:
+                            paramType = SqlDbType.VarChar;
+                            break;
+
+                        case CellType.TYPE_STRING_BY_REF:
+                            paramType = SqlDbType.VarChar;
+                            break;
+                    }
+                    sqlCmd.Parameters.Add(val, paramType);
+
+                    if ((c * 100 / len) != ((c - 1) * 100 / len))
+                        OnProgressValueChanged(new ProgressValueArgs(c));
                 }
-                sqlCmd.Parameters.Add(val, paramType);
-
-                if ((c * 100 / len) != ((c - 1) * 100 / len))
-                    OnProgressValueChanged(new ProgressValueArgs(c));
             }      
 
             OnProgressValueChanged(new ProgressValueArgs(0));

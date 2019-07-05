@@ -57,10 +57,10 @@ namespace Daedalus.Utilities
                 {
                     Table t = (Table)engine.Globals["sqlColumns"];
 
-                    string[] names = new string[t.Length + 1];
+                    string[] names = new string[t.Length];
 
-                    for (int i = 1; i < names.Length; i++)
-                        names[i] = t.Get(i).String;
+                    for (int i = 0; i < names.Length; i++)
+                        names[i] = t.Get(i + 1).String;
 
                     return names;
                 }
