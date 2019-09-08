@@ -12,7 +12,6 @@ namespace Daedalus.Utilities
         private string scriptCode = null;
         private DynValue dynVal = null;
 
-
         public LUA(string scriptCode)
         {
             engine = new Script();

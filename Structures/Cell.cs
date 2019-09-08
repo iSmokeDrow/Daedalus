@@ -15,8 +15,7 @@ namespace Daedalus.Structures
         {
             get
             {
-                if (Type == CellType.TYPE_STRING && Value != null ||
-                    Type == CellType.TYPE_STRING_BY_LEN && Value != null)
+                if (Type == CellType.TYPE_STRING && Value != null || Type == CellType.TYPE_STRING_BY_LEN && Value != null)
                 {
                     length = Value.ToString().Length;
                     return length;

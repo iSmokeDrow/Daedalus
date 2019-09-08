@@ -183,13 +183,12 @@ namespace Daedalus
         /// </summary>
         public string[] CellNames
         {
-            get
-            {
-                if (rows.Length == 0)
-                    return null;
+            get { return rows[0].CellNames; }
+        }
 
-                return rows[0].ColumnNames;
-            }
+        public string[] VisibleCellNames
+        {
+            get { return rows[0].VisibleNames; }      
         }
 
         #endregion
@@ -306,6 +305,9 @@ namespace Daedalus
 
         #region Private methods
 
+        /// <summary>
+        /// Read and store information from the header section of the rdb file. 
+        /// </summary>
         private void parseHeader()
         {
             switch (headerType)
@@ -328,6 +330,9 @@ namespace Daedalus
             }
         }
 
+        /// <summary>
+        /// Read and store the data contents section of the rdb file based on user provided lua structure.
+        /// </summary>
         private void parseContents()
         {
             rows = new Row[RowCount];
@@ -566,7 +571,11 @@ namespace Daedalus
                     case CellType.TYPE_BIT_FROM_VECTOR:
                         {
                             int bitPos = cell.Position;
+
                             string dependency = cell.Dependency;
+                            if (dependency == null)
+                                throw new ArgumentNullException(string.Format("{0} does not have a dependency listed!", ((Cell)row[c]).Name));
+
                             BitVector32 bitVector = (BitVector32)row[dependency];
                             row[c] = Convert.ToInt32(bitVector[1 << bitPos]);
                             break;
@@ -600,11 +609,9 @@ namespace Daedalus
                         prevRowIdx++;
                         break;
 
-                    case CellType.TYPE_STRING:
-                        {
+                    case CellType.TYPE_STRING:                       
                             row[c] = ByteConverterExt.ToString(sHelper.ReadBytes(cell.Length), 
-                                                                            Encoding.Default);
-                        }
+                                                                            Encoding.Default);                     
                         break;
 
                     case CellType.TYPE_STRING_BY_LEN:
@@ -716,10 +723,6 @@ namespace Daedalus
                         break;
 
                     case CellType.TYPE_DECIMAL:
-                        //int v0 = sHelper.ReadInt32;
-                        //decimal v1 = v0 / 100m;
-                        //row[c] = v1;
-
                         decimal v0 = row[c] as decimal? ?? default(decimal);
                         int v1 = Convert.ToInt32(v0 * 100);
                         sHelper.WriteInt32(v1);

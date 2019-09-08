@@ -18,10 +18,7 @@ namespace Daedalus.Utilities
             ms = new MemoryStream();
         }
 
-        public StreamIO(MemoryStream ms)
-        {
-            this.ms = ms;
-        }
+        public StreamIO(MemoryStream ms) { this.ms = ms; }
 
         public StreamIO(byte[] buffer) { ms = new MemoryStream(buffer, 0, buffer.Length, true); }
 
