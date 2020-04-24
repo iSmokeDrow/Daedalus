@@ -263,9 +263,13 @@ namespace Daedalus
         /// <param name="buffer">Buffer to be processed</param>
         public void ParseBuffer(byte[] buffer)
         {
-            sHelper = new StreamIO(buffer);
-            parseHeader();
-            parseContents();
+            try
+            {
+                sHelper = new StreamIO(buffer);
+                parseHeader();
+                parseContents();
+            }
+            catch (Exception ex) { OnMessageOccured(new MessageArgs($"An exception has occured!\nMessage: {ex.Message}\nStack-Trace: {ex.StackTrace}")); }
         }
 
         /// <summary>
@@ -273,13 +277,20 @@ namespace Daedalus
         /// </summary>
         public void Write()
         {
-            if (sHelper == null) // If data was loaded from SQL
-                sHelper = new StreamIO(encoding);
-            else
-                sHelper.Clear();
+            try
+            {
+                if (sHelper == null) // If data was loaded from SQL
+                    sHelper = new StreamIO(encoding);
+                else
+                    sHelper.Clear();
 
-            writeHeader();
-            writeContents();
+                writeHeader();
+                writeContents();
+            }
+            catch (Exception ex) 
+            { 
+                OnMessageOccured(new MessageArgs($"An exception has occured!\nMessage: {ex.Message}\nStack-Trace: {ex.StackTrace}"));
+            }
         }
 
         /// <summary>
@@ -753,8 +764,11 @@ namespace Daedalus
 
                     case CellType.TYPE_STRING:
                         {
-                            string s = row[c].ToString() + '\0';
-                            sHelper.WriteString(s, s.Length);
+                            Cell tCell = row.GetCell(c);
+
+                            string s = tCell.Value as string;
+                            int l = tCell.Length;
+                            sHelper.WriteString(s, l);
                         }
                         break;
 
@@ -778,7 +792,7 @@ namespace Daedalus
                             sHelper.WriteInt32(valLen);
                         }
                         break;
-                }
+                }                   
             }
         }
 

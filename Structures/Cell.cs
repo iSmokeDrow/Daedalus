@@ -9,27 +9,38 @@ namespace Daedalus.Structures
     {
         public string Name;
         public CellType Type;
-        public object Value;
+
+        object value;
+
+        public object Value
+        {
+            get
+            {
+                if (Type == CellType.TYPE_STRING && value != null && Default == null && !((string)value).EndsWith("\0"))
+                {
+                    string valStr = value as string;
+                    valStr += '\0';
+                    value = valStr;
+                }
+
+                return value;
+            }
+            set => this.value = value;
+        }
+
+        public object[] ConfigOptions;
+
         private int length;
         public int Length
         {
             get
-            {
-                if (Type == CellType.TYPE_STRING && Value != null || Type == CellType.TYPE_STRING_BY_LEN && Value != null)
-                {
-                    length = Value.ToString().Length;
-                    return length;
-                }
+            { 
+                if (length == 0 && Value != null && Default == null)
+                    length = (int)Enum.Parse(typeof(CellLength), Enum.GetName(typeof(CellType), Type));
 
-                if (length == 0 && Value != null)
-                {
-                    string type = Enum.GetName(typeof(CellType), Type);
-                    return (int)Enum.Parse(typeof(CellLength), type);
-                }
-                else
-                    return length;
+                return length;
             }
-            set { length = value; }
+            set => length = value;
         }
         public object Default;
         public string Dependency;
@@ -37,14 +48,10 @@ namespace Daedalus.Structures
         public FlagType Flag;
         public bool Visible;
 
-        public Cell Clone()
-        {
-            return this;
-        }
+        public override string ToString() => Value as string;
 
-        object ICloneable.Clone()
-        {
-            return Clone();
-        }
+        public Cell Clone() => this;
+
+        object ICloneable.Clone() => Clone();
     }
 }

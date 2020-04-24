@@ -10,6 +10,7 @@ namespace Daedalus.Enums
     {
         UNDEFINED = 0,
         ROW_COUNT = 1,
-        LOOP_COUNTER = 2
+        LOOP_COUNTER = 2,
+        BIT_FLAG = 3
     }
 }

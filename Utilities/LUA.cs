@@ -132,6 +132,12 @@ namespace Daedalus.Utilities
             engine.Globals["LOOPCOUNTER"] = "2";
 
             #endregion
+
+            #region Flag Type Globals
+
+            engine.Globals["BIT_FLAG"] = 3;
+
+            #endregion
         }
 
         public Cell[] GetFieldList(string tableName)
@@ -153,6 +159,19 @@ namespace Daedalus.Utilities
                 int fVal = Convert.ToInt32(fieldT["flag"]);
                 field.Flag = (FlagType)fVal;
                 field.Visible = (fieldT.Get("show").ToObject() != null) ? Convert.ToBoolean(fieldT.Get("show").Number) : true;
+
+                field.Flag = (FlagType)fieldT.Get("flag").Number;
+                
+                if (field.Flag == FlagType.BIT_FLAG)
+                {
+                    Table flagT = fieldT.Get("opt").Table;
+                    if (flagT?.Length > 0)
+                    {
+                        field.ConfigOptions = new object[flagT.Length];
+                        for (int k = 1; k < flagT.Length; ++k)
+                            field.ConfigOptions[k] = flagT.Get(k).String;
+                    }
+                }
 
                 fields[tIdx - 1] = field;
             }

@@ -19,9 +19,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="MoonSharp.Interpreter">
-      <HintPath>..\3rd Party\MoonSharp.Interpreter.dll</HintPath>
-    </Reference>
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 

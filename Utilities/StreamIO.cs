@@ -242,9 +242,7 @@ namespace Daedalus.Utilities
                 File.Delete(path);
 
             using (FileStream fs = new FileStream(path, System.IO.FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
-            {
                 ms.WriteTo(fs);
-            }
         }
 
         public void WriteByte(byte b) { ms.Write(new byte[] { b }, 0, 1); }
@@ -314,10 +312,14 @@ namespace Daedalus.Utilities
         public void WriteString(string s, int l)
         {
             byte[] b = ByteConverterExt.ToBytes(s, Encoding.Default);
-            int remainder = l - b.Length;
-            byte[] b2 = new byte[remainder];
             ms.Write(b, 0, b.Length);
-            ms.Write(b2, 0, b2.Length);
+
+            int remainder = l - b.Length;        
+            if (remainder > 0)
+            {
+                byte[] b2 = new byte[remainder];
+                ms.Write(b2, 0, b2.Length);
+            }
         }
 
         #endregion
