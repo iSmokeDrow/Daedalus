@@ -16,11 +16,20 @@ namespace Daedalus.Structures
         {
             get
             {
-                if (Type == CellType.TYPE_STRING && value != null && Default == null && !((string)value).EndsWith("\0"))
+                string valStr = value as string;
+
+                if (value != null && Default == null)
                 {
-                    string valStr = value as string;
-                    valStr += '\0';
-                    value = valStr;
+                    switch (Type)
+                    {
+                        case CellType.TYPE_STRING:
+                            if (!((string)value).EndsWith("\0"))
+                            {
+                                valStr += '\0';
+                                value = valStr;
+                            }
+                            break;
+                    }
                 }
 
                 return value;
@@ -34,9 +43,24 @@ namespace Daedalus.Structures
         public int Length
         {
             get
-            { 
+            {
                 if (length == 0 && Value != null && Default == null)
-                    length = (int)Enum.Parse(typeof(CellLength), Enum.GetName(typeof(CellType), Type));
+                {
+                    string typeName = Enum.GetName(typeof(CellType), Type);
+                    CellLength cLength;
+
+                    if (!string.IsNullOrEmpty(typeName))
+                    {
+                        if (Enum.TryParse(typeName, out cLength))
+                            length = (int)cLength;
+                        else // Cell does not have an auto len
+                            length = -1;
+                    }
+                    else
+                        throw new KeyNotFoundException($"Could not enumerate type: {Type}!");
+                }
+                else if (length == 0 && Type == CellType.TYPE_BYTE)
+                    length = 1;
 
                 return length;
             }
@@ -44,6 +68,7 @@ namespace Daedalus.Structures
         }
         public object Default;
         public string Dependency;
+        public bool HasDependency => Dependency != null;
         public int Position;
         public FlagType Flag;
         public bool Visible;

@@ -1,16 +1,23 @@
 ﻿using System;
 using System.Text;
 using System.IO;
+using Daedalus.Enums;
 
 namespace Daedalus.Utilities
 {
-    public class StreamIO
+    public class StreamIO : MemoryStream
     {
-        Encoding encoding = Encoding.Default;
-        MemoryStream ms;
-        byte[] buffer = new byte[default(int)];
+        #region fields
 
-        public StreamIO() { ms = new MemoryStream(); }
+        Encoding encoding = Encoding.Default;
+        byte[] buffer = new byte[default(int)];
+        MemoryStream ms;
+
+        #endregion
+
+        #region constructors
+
+        public StreamIO() { }
 
         public StreamIO(Encoding encoding)
         {
@@ -18,223 +25,146 @@ namespace Daedalus.Utilities
             ms = new MemoryStream();
         }
 
-        public StreamIO(MemoryStream ms) { this.ms = ms; }
-
-        public StreamIO(byte[] buffer) { ms = new MemoryStream(buffer, 0, buffer.Length, true); }
+        public StreamIO(byte[] buffer) => ms = new MemoryStream(buffer);
 
         public StreamIO(byte[] buffer, Encoding encoding)
         {
-            this.encoding = encoding;
-            ms = new MemoryStream(buffer, 0, buffer.Length, true);
+            ms = new MemoryStream(buffer);
+            this.encoding = encoding;          
         }
 
-        public StreamIO(string path, FileMode fileMode, FileAccess fileAccess)
-        {
-            if (File.Exists(path))
-                ms = new MemoryStream(FileIO.ReadAllBytes(path), true);
-            else
-                throw new FileNotFoundException("Daedalus.Utilities.StreamIO cannot initialize because the file cannot be found at path", path);
-        }
+        #endregion
 
-        public StreamIO(string path, FileMode fileMode, FileAccess fileAccess, Encoding encoding)
-        {
-            if (File.Exists(path))
-                ms = new MemoryStream(FileIO.ReadAllBytes(path), true);
-            else
-                throw new FileNotFoundException("Daedalus.Utilities.StreamIO cannot initialize because the file cannot be found at path", path);
-        }
+        #region public methods
 
-        public void Clear()
-        {
-            if (ms.Length > 0)
-            {
-                int len = (int)ms.Length;
-                ms = new MemoryStream(len);
-            }
-        }
+        public void Clear() => ms.Position = 0;
 
         #region Read
 
-        public int ReadByte
+        public dynamic Read<T>(int length = 0)
         {
-            get
+            buffer = null;
+
+            if (!is_eos)
             {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadInt16() cannot read beyond end of stream!");
+                Type type = typeof(T);
 
-                return ms.ReadByte();
+                switch (type)
+                {
+                    case Type _type when type == typeof(byte) && length == 0:
+                        return ms.ReadByte();
+
+                    case Type _type when type == typeof(byte[]) && length > 0:
+                        buffer = new byte[length];
+                        ms.Read(buffer, 0, buffer.Length);
+                        return buffer;
+
+                    case Type _type when type == typeof(char):
+                         return (char)ms.ReadByte();
+                        
+                    case Type _type when type == typeof(short):
+                        buffer = new byte[sizeof(short)];
+                        ms.Read(buffer, 0, sizeof(short));
+                        return BitConverter.ToInt16(buffer, 0);
+                        
+                    case Type _type when type == typeof(ushort):
+                        buffer = new byte[sizeof(ushort)];
+                        ms.Read(buffer, 0, sizeof(ushort));
+                        return BitConverter.ToUInt16(buffer, 0);
+                        
+                    case Type _type when type == typeof(int):
+                        buffer = new byte[sizeof(int)];
+                        ms.Read(buffer, 0, sizeof(int));
+                        return BitConverter.ToInt32(buffer, 0);
+                        
+                    case Type _type when type == typeof(uint):
+                        buffer = new byte[sizeof(uint)];
+                        ms.Read(buffer, 0, sizeof(uint));
+                        return BitConverter.ToUInt32(buffer, 0);
+
+                    case Type _type when type == typeof(long):
+                        buffer = new byte[sizeof(long)];
+                        ms.Read(buffer, 0, sizeof(long));
+                        return BitConverter.ToInt64(buffer, 0);
+
+                    case Type _type when type == typeof(ulong):
+                        buffer = new byte[sizeof(ulong)];
+                        ms.Read(buffer, 0, sizeof(ulong));
+                        return BitConverter.ToUInt64(buffer, 0);
+
+                    case Type _type when type == typeof(float):
+                        buffer = new byte[sizeof(float)];
+                        ms.Read(buffer, 0, sizeof(float));
+                        return BitConverter.ToSingle(buffer, 0);
+
+                    case Type _type when type == typeof(double):
+                        buffer = new byte[sizeof(double)];
+                        ms.Read(buffer, 0, sizeof(double));
+                        return BitConverter.ToUInt32(buffer, 0);                  
+
+                    case Type _type when type == typeof(string):
+                        buffer = new byte[length];
+                        ms.Read(buffer, 0, buffer.Length);
+                        return ByteConverterExt.ToString(buffer, Encoding.Default);
+
+                    default:
+                        return null;
+                }
             }
-        }
 
-        public byte[] ReadBytes(int count)
-        {
-            buffer = new byte[count];
-
-            if (ms.Position == ms.Length)
-                throw new Exception("Daedalus.Utilities.StreamIO.ReadBytes(int count) cannot read beyond end of stream!");
-
-            ms.Read(buffer, 0, buffer.Length);
-
-            return buffer;
-        }
-
-        public short ReadInt16
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadInt16() cannot read beyond end of stream!");
-
-                if (buffer.Length != 2)
-                    buffer = new byte[2];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToInt16(buffer, 0);
-            }
-        }
-
-        public ushort ReadUInt16
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadUInt16() cannot read beyond end of stream!");
-
-                if (buffer.Length != 2)
-                    buffer = new byte[2];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToUInt16(buffer, 0);
-            }
-        }
-
-        public int ReadInt32
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadInt32() cannot read beyond end of stream!");
-
-                if (buffer.Length != 4)
-                    buffer = new byte[4];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToInt32(buffer, 0);
-            }
-        }
-
-        public uint ReadUInt32
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadUInt32() cannot read beyond end of stream!");
-
-                if (buffer.Length != 4)
-                    buffer = new byte[4];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToUInt32(buffer, 0);
-            }
-        }
-
-        public long ReadInt64
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadInt64() cannot read beyond end of stream!");
-
-                if (buffer.Length != 8)
-                    buffer = new byte[8];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToInt64(buffer, 0);
-            }
-        }
-
-        public ulong ReadUInt64
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadUInt64() cannot read beyond end of stream!");
-
-                if (buffer.Length != 8)
-                    buffer = new byte[8];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToUInt64(buffer, 0);
-            }
-        }
-
-        public float ReadSingle
-        {
-            get { return ReadFloat32; }
-        }
-
-        public float ReadFloat
-        {
-            get { return ReadFloat32; }
-        }
-
-        public float ReadFloat32
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadFloat() cannot read beyond end of stream!");
-
-                if (buffer.Length != 4)
-                    buffer = new byte[4];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToSingle(buffer, 0);
-            }
-        }
-
-        public double ReadDouble
-        {
-            get { return ReadFloat64; }
-        }
-
-        public double ReadFloat64
-        {
-            get
-            {
-                if (ms.Position == ms.Length)
-                    throw new Exception("Daedalus.Utilities.StreamIO.ReadFloat64() cannot read beyond end of stream!");
-
-                if (buffer.Length != 8)
-                    buffer = new byte[8];
-
-                ms.Read(buffer, 0, buffer.Length);
-
-                return BitConverter.ToDouble(buffer, 0);
-            }
-        }
-
-        public string ReadString(int length)
-        {
-            if (ms.Position == ms.Length)
-                throw new Exception("Daedalus.Utilities.StreamIO.ReadString(int length) cannot read beyond end of stream!");
-
-            buffer = new byte[length];
-            ms.Read(buffer, 0, buffer.Length);
-
-            return ByteConverterExt.ToString(buffer, encoding);
+            return null;
         }
 
         #endregion
 
         #region Write
+
+        public void Write(dynamic value)
+        {
+            if (value.GetType() == typeof(string))
+                Write<string>(value, ((string)value).Length);
+            else
+                Write(value, 0);
+        }
+
+        public int Write<T>(dynamic value, int length = 0) => Write(typeof(T), value, length);
+
+        public int Write(Type type, dynamic value, int length = 0)
+        {
+            if (value == null)
+                throw new Exception("Cannot write 'nothing' (null) to the stream!");
+
+            if (type == typeof(string)) //If the value is a string we need to write it a special way
+            {
+                if (length <= 0)
+                {
+                    //todo debug msg
+                    length = ((string)value).Length;
+                }
+
+                byte[] b = ByteConverterExt.ToBytes(value, Encoding.Default);
+                ms.Write(b, 0, b.Length);
+
+                int remainder = length - b.Length;
+                if (remainder > 0)
+                {
+                    byte[] b2 = new byte[remainder];
+                    ms.Write(b2, 0, b2.Length);
+                }
+            }
+            else if (type == typeof(byte[]))
+            {
+                buffer = value as byte[];
+                ms.Write(buffer, 0, buffer.Length);
+            }
+            else //If the value is a simple/primitive
+            {
+                buffer = BitConverter.GetBytes(value); //Convert value to bytes
+                ms.Write(buffer, 0, buffer.Length);
+            }
+
+            return -1;
+        }
 
         public void WriteToFile(string path)
         {
@@ -245,80 +175,48 @@ namespace Daedalus.Utilities
                 ms.WriteTo(fs);
         }
 
-        public void WriteByte(byte b) { ms.Write(new byte[] { b }, 0, 1); }
+        #endregion
 
-        public void WriteBytes(byte[] b) { ms.Write(b, 0, b.Length); }
+        #endregion
 
-        public void WriteInt16(short s)
+        #region public properties
+
+        public override long Position { get => ms.Position; set => ms.Position = value; }
+
+        public override long Length => ms.Length;
+
+        public override byte[] ToArray() => ms.ToArray();
+
+        public bool EndOfStream => ms.Position >= ms.Length;
+
+        public bool WillEndStream(int length) => ms.Position + length >= ms.Length;
+
+        #endregion
+
+        #region private properties
+
+        byte peek(long offset = 0)
         {
-            byte[] b = BitConverter.GetBytes(s);
-            ms.Write(b, 0, b.Length);
+            if (offset > 0)
+                ms.Position = offset;
+
+            if (WillEndStream(1))
+                throw new Exception("Daedalus.Utilities.StreamIO.peek() cannot read beyond the end of stream!");
+
+            byte retB = Read<byte>();
+            ms.Seek(-1, SeekOrigin.Current);
+
+            return retB;
         }
 
-        public void WriteUInt16(ushort s)
+        bool is_eos
         {
-            byte[] b = BitConverter.GetBytes(s);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteInt32(int i)
-        {
-            byte[] b = BitConverter.GetBytes(i);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteUInt32(uint i)
-        {
-            byte[] b = BitConverter.GetBytes(i);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteInt64(long l)
-        {
-            byte[] b = BitConverter.GetBytes(l);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteUInt64(ulong l)
-        {
-            byte[] b = BitConverter.GetBytes(l);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteSingle(float f)
-        {
-            byte[] b = BitConverter.GetBytes(f);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteFloat(float f)
-        {
-            byte[] b = BitConverter.GetBytes(f);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteDouble(double d)
-        {
-            byte[] b = BitConverter.GetBytes(d);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteString(string s)
-        {
-            byte[] b = ByteConverterExt.ToBytes(s, Encoding.Default);
-            ms.Write(b, 0, b.Length);
-        }
-
-        public void WriteString(string s, int l)
-        {
-            byte[] b = ByteConverterExt.ToBytes(s, Encoding.Default);
-            ms.Write(b, 0, b.Length);
-
-            int remainder = l - b.Length;        
-            if (remainder > 0)
+            get
             {
-                byte[] b2 = new byte[remainder];
-                ms.Write(b2, 0, b2.Length);
+                if (EndOfStream)
+                    throw new EndOfStreamException();
+                else
+                    return false;
             }
         }
 

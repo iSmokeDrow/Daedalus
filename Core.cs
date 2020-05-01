@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Data;
+using System.Data.Common;
+using System.Diagnostics;
 using System.Data.SqlClient;
 using System.Text;
 using Daedalus.Enums;
@@ -10,6 +12,9 @@ using Daedalus.Utilities;
 
 namespace Daedalus
 {
+    //TODO: lua needs to move here!
+    //TODO: InsertStatement: mysql/mssql both can be downcast to DbCommand!
+
     /// <summary>
     /// Provides low level access and manipulation of Rappelz .rdb data storage mediums
     /// </summary>
@@ -155,14 +160,6 @@ namespace Daedalus
         }
 
         /// <summary>
-        /// Blank Insert statement for use in inserting information from the RDB to SQL table.
-        /// </summary>
-        public SqlCommand InsertStatement
-        {
-            get { return generateInsert(); }
-        }
-
-        /// <summary>
         /// Determines if the user has defined a Select statement for reading information from an SQL table.
         /// </summary>
         public bool UseSelectStatement
@@ -190,6 +187,8 @@ namespace Daedalus
         {
             get { return rows[0].VisibleNames; }      
         }
+
+        public Cell[] VisibleCells => new Row(CellTemplate).VisibleCells;
 
         #endregion
 
@@ -325,9 +324,9 @@ namespace Daedalus
             {
                 case HeaderType.Traditional:
 
-                    tHeader.DateTime = sHelper.ReadString(8);
-                    tHeader.Padding = sHelper.ReadBytes(120);
-                    tHeader.RowCount = sHelper.ReadInt32;
+                    tHeader.DateTime = sHelper.Read<string>(8);
+                    tHeader.Padding = sHelper.Read<byte[]>(120);
+                    tHeader.RowCount = sHelper.Read<int>();
 
                     break;
 
@@ -360,7 +359,7 @@ namespace Daedalus
 
                         for (int r = 0; r < RowCount; r++)
                         {
-                            int l = sHelper.ReadInt32;
+                            int l = sHelper.Read<int>();
 
                             for (int i = 0; i < l; i++)
                             {
@@ -411,10 +410,8 @@ namespace Daedalus
                     string newDate = string.Format("{0}{1}{2}", DateTime.Now.Year,
                                                                 DateTime.Now.Month.ToString("D2"),
                                                                 DateTime.Now.Day.ToString("D2"));
-                    sHelper.WriteBytes(ByteConverterExt.ToBytes(newDate, Encoding.Default));
-                    sHelper.WriteString(string.Format("........RDB Written with Daedalus v{0} by iSmokeDrow.",
-                    System.Diagnostics.FileVersionInfo.GetVersionInfo("Daedalus.dll").FileVersion.Remove(0,2)),
-                                                                                                          120);
+                    sHelper.Write(newDate);
+                    sHelper.Write<string>(($"........RDB Written with Daedalus v{FileVersionInfo.GetVersionInfo("Daedalus.dll").FileVersion.Remove(0, 2)} by iSmokeDrow."), 120);
 
                     if (lua.SpecialCase)
                     {
@@ -435,12 +432,12 @@ namespace Daedalus
                                     }
                                 }
 
-                                sHelper.WriteInt32(lCount);
+                                sHelper.Write<int>(lCount);
                                 break;
                         }
                     }
                     else
-                        sHelper.WriteInt32(RowCount);
+                        sHelper.Write<int>(RowCount);
 
                     break;
 
@@ -472,7 +469,7 @@ namespace Daedalus
                                 string counterName = row.GetNameByFlag(FlagType.LOOP_COUNTER);
                                 Row[] treeRows = FindAll(counterName, cVal);
 
-                                sHelper.WriteInt32(treeRows.Length);
+                                sHelper.Write<int>(treeRows.Length);
 
                                 for (int tR = 0; tR < treeRows.Length; tR++)
                                 {
@@ -532,35 +529,35 @@ namespace Daedalus
                         goto case CellType.TYPE_SHORT;
 
                     case CellType.TYPE_INT_16:
-                        row[c] = sHelper.ReadInt16;
+                        row[c] = sHelper.Read<short>();
                         break;
 
                     case CellType.TYPE_USHORT:
                         goto case CellType.TYPE_UINT_16;
 
                     case CellType.TYPE_UINT_16:
-                        row[c] = sHelper.ReadUInt16;
+                        row[c] = sHelper.Read<ushort>();
                         break;
 
                     case CellType.TYPE_INT:
                         goto case CellType.TYPE_INT_32;
 
                     case CellType.TYPE_INT_32:
-                        row[c] = sHelper.ReadInt32;
+                        row[c] = sHelper.Read<int>();
                         break;
 
                     case CellType.TYPE_UINT:
                         goto case CellType.TYPE_UINT_32;
 
                     case CellType.TYPE_UINT_32:
-                        row[c] = sHelper.ReadUInt32;
+                        row[c] = sHelper.Read<uint>();
                         break;
 
                     case CellType.TYPE_INT_64:
                         goto case CellType.TYPE_LONG;
 
                     case CellType.TYPE_LONG:
-                        row[c] = sHelper.ReadInt64;
+                        row[c] = sHelper.Read<long>();
                         break;
 
                     //TODO: Implement TYPE_ULONG
@@ -568,15 +565,23 @@ namespace Daedalus
                     //    row[c] = sHelper.ReadInt64;
                     //    break;
 
+                    case CellType.TYPE_DATETIME:
+                        {
+                            int secFromEpoch = sHelper.Read<int>();
+                            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                            row[c] = epoch.AddSeconds(secFromEpoch);
+                        }
+                        break;
+
                     case CellType.TYPE_BYTE:
                         if (cell.Length > 1)
-                            row[c] = sHelper.ReadBytes(cell.Length);
+                            row[c] = sHelper.Read<byte[]>(cell.Length);
                         else
-                            row[c] = sHelper.ReadByte;
+                            row[c] = sHelper.Read<byte>();
                         break;
 
                     case CellType.TYPE_BIT_VECTOR:
-                        row[c] = new BitVector32(sHelper.ReadInt32);
+                        row[c] = new BitVector32(sHelper.Read<int>());
                         break;
 
                     case CellType.TYPE_BIT_FROM_VECTOR:
@@ -593,7 +598,7 @@ namespace Daedalus
                         }
 
                     case CellType.TYPE_DECIMAL:
-                        int v0 = sHelper.ReadInt32;
+                        int v0 = sHelper.Read<int>();
                         decimal v1 = v0 / 100m;
                         row[c] = v1;
                         break;
@@ -605,14 +610,14 @@ namespace Daedalus
                         goto case CellType.TYPE_SINGLE;
 
                     case CellType.TYPE_SINGLE:
-                        row[c] = sHelper.ReadSingle;
+                        row[c] = sHelper.Read<float>();
                         break;
 
                     case CellType.TYPE_FLOAT_64:
                         goto case CellType.TYPE_SINGLE;
 
                     case CellType.TYPE_DOUBLE:
-                        row[c] = sHelper.ReadDouble;
+                        row[c] = sHelper.Read<double>();
                         break;
 
                     case CellType.TYPE_SID:
@@ -620,9 +625,9 @@ namespace Daedalus
                         prevRowIdx++;
                         break;
 
-                    case CellType.TYPE_STRING:                       
-                            row[c] = ByteConverterExt.ToString(sHelper.ReadBytes(cell.Length), 
-                                                                            Encoding.Default);                     
+                    case CellType.TYPE_STRING:
+                        row[c] = ByteConverterExt.ToString(sHelper.Read<byte[]>(cell.Length), 
+                                                                        Encoding.Default);                     
                         break;
 
                     case CellType.TYPE_STRING_BY_LEN:
@@ -634,7 +639,7 @@ namespace Daedalus
                             if (len < 0)
                                 break;
                             else
-                                row[c] = sHelper.ReadString(len);
+                                row[c] = sHelper.Read<string>(len);
                         }
                         break;
 
@@ -642,7 +647,7 @@ namespace Daedalus
                         {
                             string dependency = cell.Dependency;
                             int len = dHeader[dependency] as int? ?? default(int);
-                            row[c] = sHelper.ReadString(len);
+                            row[c] = sHelper.Read<string>(len);
                         }
                         break;
 
@@ -668,7 +673,7 @@ namespace Daedalus
                     case CellType.TYPE_SHORT:
                         {
                             short s = row[c] as short? ?? default(short);
-                            sHelper.WriteInt16(s);
+                            sHelper.Write<short>(s);
                         }
                         break;
 
@@ -678,7 +683,7 @@ namespace Daedalus
                     case CellType.TYPE_UINT_16:
                         {
                             ushort s = row[c] as ushort? ?? default(ushort);
-                            sHelper.WriteUInt16(s);
+                            sHelper.Write<ushort>(s);
                         }
                         break;
 
@@ -688,14 +693,14 @@ namespace Daedalus
                     case CellType.TYPE_INT_32:
                         {
                             int i = row[c] as int? ?? default(int);
-                            sHelper.WriteInt32(i);
+                            sHelper.Write<int>(i);
                         }
                         break;
 
                     case CellType.TYPE_UINT_32:
                         {
                             uint i = Convert.ToUInt32(row[c]);
-                            sHelper.WriteUInt32(i);
+                            sHelper.Write<uint>(i);
                         }
                         break;
 
@@ -705,7 +710,7 @@ namespace Daedalus
                     case CellType.TYPE_LONG:
                         {
                             long l = row[c] as long? ?? default(long);
-                            sHelper.WriteDouble(l);
+                            sHelper.Write<double>(l);
                         }
                         break;
 
@@ -713,30 +718,38 @@ namespace Daedalus
                     //case CellType.TYPE_ULONG:
                     //    break;
 
+                    case CellType.TYPE_DATETIME:
+                        {
+                            DateTime dt = (DateTime)row[c];
+                            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                            sHelper.Write<int>(Convert.ToInt32((dt - epoch).TotalSeconds));
+                        }
+                        break;
+
                     case CellType.TYPE_BYTE:
                         if (cell.Length > 0)
                         {
                             byte[] b = new byte[cell.Length];
-                            sHelper.WriteBytes(b);
+                            sHelper.Write<byte[]>(b);
                         }
                         else
                         {
                             byte b = row[c] as byte? ?? default(byte);
-                            sHelper.WriteByte(b);
+                            sHelper.Write<byte>(b);
                         }
                         break;
 
                     case CellType.TYPE_BIT_VECTOR:
                         {
                             int i = BitConverter.ToInt32(generateBitVector(row, cell.Name), 0);
-                            sHelper.WriteInt32(i);
+                            sHelper.Write<int>(i);
                         }
                         break;
 
                     case CellType.TYPE_DECIMAL:
                         decimal v0 = row[c] as decimal? ?? default(decimal);
                         int v1 = Convert.ToInt32(v0 * 100);
-                        sHelper.WriteInt32(v1);
+                        sHelper.Write<int>(v1);
                         break;
 
                     case CellType.TYPE_FLOAT:
@@ -748,7 +761,7 @@ namespace Daedalus
                     case CellType.TYPE_SINGLE:
                         {
                             float s = row[c] as float? ?? default(float);
-                            sHelper.WriteSingle(s);
+                            sHelper.Write<float>(s);
                         }
                         break;
 
@@ -758,7 +771,7 @@ namespace Daedalus
                     case CellType.TYPE_DOUBLE:
                         {
                             double d = row[c] as double? ?? default(double);
-                            sHelper.WriteDouble(d);
+                            sHelper.Write<double>(d);
                         }
                         break;
 
@@ -767,21 +780,28 @@ namespace Daedalus
                             Cell tCell = row.GetCell(c);
 
                             string s = tCell.Value as string;
-                            int l = tCell.Length;
-                            sHelper.WriteString(s, l);
+                            sHelper.Write<string>(s, tCell.Length);
                         }
                         break;
 
                     case CellType.TYPE_STRING_BY_LEN:
-                        goto case CellType.TYPE_STRING;
+                        {
+                            Cell tCell = row.GetCell(c);
+                            string dep = tCell.Dependency;
+                            Cell dCell = row.GetCell(dep);
+
+                            string s = tCell.Value as string; //TODO: update cells to be a generic class
+                            sHelper.Write<string>(s, (int)dCell.Value);
+                        }
+                        break;
 
                     case CellType.TYPE_STRING_BY_HEADER_REF:
                         {
                             byte[] buffer = ByteConverterExt.ToBytes(row[c].ToString(), Encoding.Default);
                             string refName = cell.Dependency;
                             int remainder = Convert.ToInt32(dHeader[refName]) - buffer.Length;
-                            sHelper.WriteBytes(buffer);
-                            sHelper.WriteBytes(new byte[remainder]);
+                            sHelper.Write<byte[]>(buffer);
+                            sHelper.Write<byte[]>(new byte[remainder]);
                         }
                         break;
 
@@ -789,7 +809,7 @@ namespace Daedalus
                         {
                             string cellName = row.GetNameByDependency(cell.Name);
                             int valLen = row[cellName].ToString().Length + 1;
-                            sHelper.WriteInt32(valLen);
+                            sHelper.Write<int>(valLen);
                         }
                         break;
                 }                   
@@ -828,28 +848,27 @@ namespace Daedalus
             return results.ToArray();
         }
 
-        private SqlCommand generateInsert()
+        public DbCommand GenerateInsert()
         {
-            SqlCommand sqlCmd = new SqlCommand();
-            string columns = string.Empty;
-            string parameters = string.Empty;
-
+            DbCommand cmd = new SqlCommand();
             string[] names = (lua.UseSqlColumns) ? lua.SqlColumns : CellNames;
             int len = names.Length;
 
-            OnProgressMaxChanged(new ProgressMaxArgs(len));
+            string columns = string.Empty;
+            string parameterStr = string.Empty;
+            List<DbParameter> parameters = new List<DbParameter>();     
 
             for (int c = 0; c < len; c++)
             {
                 string val = names[c];
-                Cell cell = (Cell)rows[0].GetCell(val);
+                Cell cell = rows[0].GetCell(val);
                 CellType columnType = cell.Type;
 
                 if (cell.Visible)
                 {
                     columns += string.Format("[{0}]{1},", val, string.Empty);
-                    parameters += string.Format("@{0}{1},", val, string.Empty);
-                    SqlDbType paramType = SqlDbType.Int;
+                    parameterStr += string.Format("@{0}{1},", val, string.Empty);
+                    SqlParameter sqlParam = new SqlParameter() { ParameterName = val };
 
                     switch (columnType)
                     {
@@ -857,7 +876,7 @@ namespace Daedalus
                             goto case CellType.TYPE_INT_16;
 
                         case CellType.TYPE_INT_16:
-                            paramType = SqlDbType.SmallInt;
+                            sqlParam.SqlDbType = SqlDbType.SmallInt;
                             break;
 
                         case CellType.TYPE_USHORT:
@@ -870,7 +889,7 @@ namespace Daedalus
                             goto case CellType.TYPE_INT_32;
 
                         case CellType.TYPE_INT_32:
-                            paramType = SqlDbType.Int;
+                            sqlParam.SqlDbType = SqlDbType.Int;
                             break;
 
                         case CellType.TYPE_UINT:
@@ -880,55 +899,53 @@ namespace Daedalus
                             goto case CellType.TYPE_INT_32;
 
                         case CellType.TYPE_INT_64:
-                            paramType = SqlDbType.BigInt;
+                            sqlParam.SqlDbType = SqlDbType.BigInt;
                             break;
 
                         case CellType.TYPE_LONG:
                             goto case CellType.TYPE_INT_64;
 
                         case CellType.TYPE_BYTE:
-                            paramType = SqlDbType.TinyInt;
+                            sqlParam.SqlDbType = SqlDbType.TinyInt;
                             break;
 
                         case CellType.TYPE_DATETIME:
-                            paramType = SqlDbType.DateTime;
+                            sqlParam.SqlDbType = SqlDbType.DateTime;
                             break;
 
                         case CellType.TYPE_DECIMAL:
-                            paramType = SqlDbType.Decimal;
+                            sqlParam.SqlDbType = SqlDbType.Decimal;
                             break;
 
                         case CellType.TYPE_FLOAT: case CellType.TYPE_FLOAT_32:
                             goto case CellType.TYPE_SINGLE;
 
                         case CellType.TYPE_SINGLE:
-                            paramType = SqlDbType.Real;
+                            sqlParam.SqlDbType = SqlDbType.Real;
                             break;
 
                         case CellType.TYPE_DOUBLE:
-                            paramType = SqlDbType.Float;
+                            sqlParam.SqlDbType = SqlDbType.Float;
                             break;
 
                         case CellType.TYPE_STRING:
-                            paramType = SqlDbType.VarChar;
+                            sqlParam.SqlDbType = SqlDbType.VarChar;
                             break;
+
+                        case CellType.TYPE_STRING_BY_LEN:
+                            goto case CellType.TYPE_STRING;
 
                         case CellType.TYPE_STRING_BY_REF:
-                            paramType = SqlDbType.VarChar;
-                            break;
+                            goto case CellType.TYPE_STRING;
                     }
-                    sqlCmd.Parameters.Add(val, paramType);
-
-                    if ((c * 100 / len) != ((c - 1) * 100 / len))
-                        OnProgressValueChanged(new ProgressValueArgs(c));
+                    
+                    parameters.Add(sqlParam as DbParameter);
                 }
             }      
 
-            OnProgressValueChanged(new ProgressValueArgs(0));
-            OnProgressMaxChanged(new ProgressMaxArgs(100));
-
-            sqlCmd.CommandText = string.Format("INSERT INTO <tableName> ({0}) VALUES ({1})", columns.Remove(columns.Length - 1, 1), parameters.Remove(parameters.Length - 1, 1));
-            return sqlCmd;
+            cmd.CommandText = string.Format("INSERT INTO <tableName> ({0}) VALUES ({1})", columns.Remove(columns.Length - 1, 1), parameterStr.Remove(parameterStr.Length - 1, 1));
+            cmd.Parameters.AddRange(parameters.ToArray());
+            return cmd;
         }
 
         byte[] generateBitVector(Row row, string fieldName)

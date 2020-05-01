@@ -29,9 +29,6 @@ namespace Daedalus.Structures
             get { return cells.Length; }
         }
 
-        /// <summary>
-        /// Amount of cells with the type BIT_FROM_VECTOR
-        /// </summary>
         public int VisibleLength
         {
             get

@@ -109,7 +109,7 @@ namespace Daedalus.Utilities
             engine.Globals["DOUBLE"] = 16;
             engine.Globals["FLOAT64"] = 17;
             engine.Globals["DECIMAL"] = 18;
-            //engine.Globals["DATETIME"] = 19;
+            engine.Globals["DATETIME"] = 19;
             engine.Globals["SID"] = 20;
             engine.Globals["STRING"] = 21;            
             engine.Globals["STRING_BY_LEN"] = 22;
@@ -168,8 +168,8 @@ namespace Daedalus.Utilities
                     if (flagT?.Length > 0)
                     {
                         field.ConfigOptions = new object[flagT.Length];
-                        for (int k = 1; k < flagT.Length; ++k)
-                            field.ConfigOptions[k] = flagT.Get(k).String;
+                        for (int k = 0; k < flagT.Length; ++k)
+                            field.ConfigOptions[k] = flagT.Get(k + 1).String;
                     }
                 }
 
