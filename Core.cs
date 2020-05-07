@@ -9,12 +9,12 @@ using System.Text;
 using Daedalus.Enums;
 using Daedalus.Structures;
 using Daedalus.Utilities;
+using MoonSharp.Interpreter;
+using System.Threading.Tasks;
 
 namespace Daedalus
 {
     //TODO: lua needs to move here!
-    //TODO: InsertStatement: mysql/mssql both can be downcast to DbCommand!
-
     /// <summary>
     /// Provides low level access and manipulation of Rappelz .rdb data storage mediums
     /// </summary>
@@ -22,25 +22,25 @@ namespace Daedalus
     {
         #region Private fields
 
+        Script luaScript = new Script();
         TraditionalHeader tHeader;
-        private Cell[] dHeader_Template;
-        private Cell[] row_Template;
-        private Row[] rows;
-        private Row dHeader;
-        LUA lua;
+        Cell[] dHeader_Template;
+        Cell[] row_Template;
+        public Row[] Rows;
+        Row dHeader;
         string luaPath;
         string rdbPath;
         StreamIO sHelper;
-        private Encoding encoding;
+        Encoding encoding = Encoding.Default;
 
         HeaderType headerType
         {
             get
             {
-                if (lua == null)
+                if (luaScript == null)
                     return HeaderType.Undefined;
                 else
-                    return (lua.UseHeader) ? HeaderType.Defined : HeaderType.Traditional;
+                    return (UseHeader) ? HeaderType.Defined : HeaderType.Traditional;
             }
         }
 
@@ -48,31 +48,26 @@ namespace Daedalus
 
         #endregion
 
-        #region Public fields
+        #region Public Properties
 
         /// <summary>
         /// Collection of cell information for the row template
         /// </summary>
-        public Cell[] CellTemplate
-        {
-            get { return (Cell[])row_Template.Clone(); }
-        }
+        public Cell[] Cells(int index) => this[index].Cells;
+
+        public Cell[] CellTemplate => row_Template.Clone() as Cell[];
+
+        public Row RowTemplate => new Row(row_Template.Clone() as Cell[]);
 
         /// <summary>
         /// Collection of cell information for defined header
         /// </summary>
-        public Cell[] HeaderTemplate
-        {
-            get { return (Cell[])dHeader_Template.Clone(); }
-        }
+        public Cell[] HeaderTemplate => (Cell[])dHeader_Template.Clone();
 
         /// <summary>
         /// Amount of Cells contained in the row_Template
         /// </summary>
-        public int CellCount
-        {
-            get { return row_Template.Length; }
-        }
+        public int CellCount => row_Template.Length;
 
         /// <summary>
         /// Amount of Row[] being stored in rows
@@ -85,8 +80,8 @@ namespace Daedalus
                     return dHeader.GetValueByFlag(FlagType.ROW_COUNT) as int? ?? default(int);
                 else
                 {
-                    if (rows != null  && tHeader.RowCount < rows.Length)
-                        tHeader.RowCount = rows.Length;
+                    if (Rows != null  && tHeader.RowCount < Rows.Length)
+                        tHeader.RowCount = Rows.Length;
 
                     return tHeader.RowCount;
                 }
@@ -101,23 +96,11 @@ namespace Daedalus
         }
 
         /// <summary>
-        /// Collection of loaded Rows
-        /// </summary>
-        public Row[] Rows
-        {
-            get { return rows; }
-            set { rows = value; }
-        }
-
-        /// <summary>
         /// Returns stored row at the provided index or null
         /// </summary>
         /// <param name="index">Zero-based ordinal location of the desired Row</param>
         /// <returns>Row object from rows[index] or null</returns>
-        public Row this[int index]
-        {
-            get { return rows[index]; }
-        }
+        public Row this[int index] => Rows[index]; //TODO prolly gonna cause a problem
 
         /// <summary>
         /// Physical path to the LUA file containing structure definitions
@@ -147,80 +130,84 @@ namespace Daedalus
                 if (RdbPath != null)
                     return System.IO.Path.GetFileName(RdbPath);
                 else
-                    return lua.FileName;
+                    return luaScript.Globals["fileName"] as string;
             }
         }
 
         /// <summary>
         /// Name of the target Database table
         /// </summary>
-        public string TableName
-        {
-            get { return lua.TableName; }
-        }
+        public string TableName => (luaScript.Globals["tableName"] != null) ? luaScript.Globals["tableName"] as string : string.Empty;
 
         /// <summary>
         /// Determines if the user has defined a Select statement for reading information from an SQL table.
         /// </summary>
-        public bool UseSelectStatement
-        {
-            get { return lua.UseSelectStatement; }
-        }
+        public bool UseSelectStatement => luaScript.Globals["selectStatement"] != null;
 
         /// <summary>
         /// User defined Select statement from the lua structure.
         /// </summary>
-        public string SelectStatement
+        public string SelectStatement => luaScript.Globals["selectStatement"].ToString();
+
+        public bool UseSqlColumns => luaScript.Globals["sqlColumns"] != null;
+
+        public string[] SqlColumns
         {
-            get { return lua.SelectStatement; }
+            get
+            {
+                try
+                {
+                    Table t = (Table)luaScript.Globals["sqlColumns"];
+
+                    string[] names = new string[t.Length];
+
+                    for (int i = 0; i < names.Length; i++)
+                        names[i] = t.Get(i + 1).String;
+
+                    return names;
+                }
+                catch (Exception ex) { throw new Exception(ex.Message, ex.InnerException); }
+            }
         }
 
         /// <summary>
         /// All cell names in the row_Template
         /// </summary>
-        public string[] CellNames
+        public string[] CellNames => RowTemplate.CellNames;
+
+        public string[] VisibleCellNames => RowTemplate.VisibleNames; //These three need to actually use a n 'RowTemplate' complete object
+
+        public Cell[] VisibleCells => RowTemplate.VisibleCells;
+
+        public bool IsSpecialCase => luaScript.Globals["specialCase"] != null;
+
+        public SpecialCase Case
         {
-            get { return rows[0].CellNames; }
+            get
+            {
+                int caseVal = Convert.ToInt32(luaScript.Globals["specialCase"]);
+                return (SpecialCase)caseVal;
+            }
         }
 
-        public string[] VisibleCellNames
-        {
-            get { return rows[0].VisibleNames; }      
-        }
+        public bool UseRowProcessor => luaScript.Globals["ProcessRow"] != null;
 
-        public Cell[] VisibleCells => new Row(CellTemplate).VisibleCells;
+        public bool UseHeader => luaScript.Globals[FieldsType.Header] != null;
 
         #endregion
 
         #region Constructors
 
-        /// <summary>
-        /// Dummy constructor
-        /// </summary>
         public Core() { }
 
-        /// <summary>
-        /// Initialize the core with paths and encoding
-        /// </summary>
-        /// <param name="luaPath">Physical path to the lua structure file</param>
-        /// <param name="rdbPath">Physical path to the rdb data file</param>
-        /// <param name="encoding">Encoding which to read and write strings</param>
-        public Core(string luaPath, string rdbPath, Encoding encoding)
+        public Core(string luaPath, string rdbPath = null)
         {
             this.luaPath = luaPath;
-            this.rdbPath = rdbPath;
-            this.encoding = encoding;
-        }
 
-        /// <summary>
-        /// Initialize the core with paths
-        /// </summary>
-        /// <param name="luaPath">Physical path to the lua structure file</param>
-        /// <param name="rdbPath">Physical path to the rdb data file</param>
-        public Core(string luaPath, string rdbPath)
-        {
-            this.luaPath = luaPath;
-            this.rdbPath = rdbPath;
+            if (!string.IsNullOrEmpty(rdbPath))
+                this.rdbPath = rdbPath;
+
+           Initialize();
         }
 
         #endregion
@@ -243,17 +230,47 @@ namespace Daedalus
 
         #region Public methods
 
+        public void Initialize(string luaPath)
+        {
+            this.luaPath = luaPath;
+            Initialize();
+        }
+
+        public void Initialize(string luaPath, string rdbPath)
+        {
+            this.luaPath = luaPath;
+            this.rdbPath = rdbPath;
+            Initialize();
+        }
+
         /// <summary>
         /// Initialize the script engine by iterating to lua structure file
         /// </summary>
         public void Initialize()
         {
-            lua = new LUA(FileIO.ReadAllText(luaPath));
+            addGlobals();
+            addUserData();
+
+            luaScript.DoFile(luaPath);
 
             if (headerType == HeaderType.Defined)
-                dHeader_Template = lua.GetFieldList(FieldsType.Header);
+                dHeader_Template = getCells(FieldsType.Header);
 
-            row_Template = lua.GetFieldList("fields");
+            row_Template = getCells("fields");           
+        }
+
+        public void ProcessRow(string mode, Row row, int rowNum)
+        {
+            DynValue res = null;
+
+            try
+            {
+                res = luaScript.Call(luaScript.Globals["ProcessRow"], mode, row, rowNum);
+            }
+            catch (ScriptRuntimeException srEx)
+            {
+                throw new Exception(srEx.Message, srEx.InnerException);
+            }
         }
 
         /// <summary>
@@ -308,12 +325,119 @@ namespace Daedalus
         public void SetData(Row[] rows)
         {
             tHeader.RowCount = rows.Length;
-            this.rows = rows;           
+            this.Rows = rows;           
+        }
+
+        /// <summary>
+        /// Clear the stored rows.
+        /// </summary>
+        public void ClearData()
+        {
+            Rows = new Row[0];
         }
 
         #endregion
 
         #region Private methods
+
+        void addGlobals()
+        {
+            #region Type Globals
+
+            luaScript.Globals["BYTE"] = 0;
+            luaScript.Globals["BIT_VECTOR"] = 1;
+            luaScript.Globals["BIT_FROM_VECTOR"] = 2;
+            luaScript.Globals["INT16"] = 3;
+            luaScript.Globals["SHORT"] = 3;
+            luaScript.Globals["UINT16"] = 5;
+            luaScript.Globals["USHORT"] = 6;
+            luaScript.Globals["INT32"] = 7;
+            luaScript.Globals["INT"] = 8;
+            luaScript.Globals["UINT32"] = 9;
+            luaScript.Globals["UINT"] = 10;
+            luaScript.Globals["INT64"] = 11;
+            luaScript.Globals["LONG"] = 12;
+            luaScript.Globals["SINGLE"] = 13;
+            luaScript.Globals["FLOAT"] = 14;
+            luaScript.Globals["FLOAT32"] = 15;
+            luaScript.Globals["DOUBLE"] = 16;
+            luaScript.Globals["FLOAT64"] = 17;
+            luaScript.Globals["DECIMAL"] = 18;
+            luaScript.Globals["DATETIME"] = 19;
+            luaScript.Globals["SID"] = 20;
+            luaScript.Globals["STRING"] = 21;
+            luaScript.Globals["STRING_BY_LEN"] = 22;
+            luaScript.Globals["STRING_HEADER_REF"] = 23;
+            luaScript.Globals["STRING_LEN"] = 25;
+
+            #endregion
+
+            #region Direction Globals
+
+            luaScript.Globals["READ"] = "read";
+            luaScript.Globals["WRITE"] = "write";
+
+            #endregion
+
+            #region Special Case Globals
+
+            luaScript.Globals["DOUBLELOOP"] = 1;
+            luaScript.Globals["ROWCOUNT"] = 1;
+            luaScript.Globals["LOOPCOUNTER"] = "2";
+
+            #endregion
+
+            #region Flag Type Globals
+
+            luaScript.Globals["BIT_FLAG"] = 3;
+
+            #endregion
+        }
+
+        void addUserData()
+        {
+            UserData.RegisterType<Row>();
+            UserData.RegisterType<Cell>();
+        }
+
+        Cell[] getCells(string tableName)
+        {
+            Table t = (Table)luaScript.Globals[tableName];
+            Cell[] fields = new Cell[t.Length];
+
+            for (int tIdx = 1; tIdx < t.Length + 1; tIdx++)
+            {
+                Table fieldT = t.Get(tIdx).Table;
+                Cell field = new Cell();
+
+                field.Name = fieldT.Get(1).String;
+                field.Type = (CellType)fieldT.Get(2).Number;
+                field.Length = (int)fieldT.Get("length").Number;
+                field.Dependency = fieldT.Get("dependency").String;
+                field.Default = (object)fieldT.Get("default").ToObject();
+                field.Position = (int)fieldT.Get("bit_position").Number;
+                int fVal = Convert.ToInt32(fieldT["flag"]);
+                field.Flag = (FlagType)fVal;
+                field.Visible = (fieldT.Get("show").ToObject() != null) ? Convert.ToBoolean(fieldT.Get("show").Number) : true;
+
+                field.Flag = (FlagType)fieldT.Get("flag").Number;
+
+                if (field.Flag == FlagType.BIT_FLAG)
+                {
+                    Table flagT = fieldT.Get("opt").Table;
+                    if (flagT?.Length > 0)
+                    {
+                        field.ConfigOptions = new object[flagT.Length];
+                        for (int k = 0; k < flagT.Length; ++k)
+                            field.ConfigOptions[k] = flagT.Get(k + 1).String;
+                    }
+                }
+
+                fields[tIdx - 1] = field;
+            }
+
+            return fields;
+        }
 
         /// <summary>
         /// Read and store information from the header section of the rdb file. 
@@ -345,13 +469,13 @@ namespace Daedalus
         /// </summary>
         private void parseContents()
         {
-            rows = new Row[RowCount];
+            Rows = new Row[RowCount];
 
             OnProgressMaxChanged(new ProgressMaxArgs(RowCount));
 
-            if (lua.SpecialCase)
+            if (IsSpecialCase)
             {
-                switch (lua.Case)
+                switch (Case)
                 {
                     case SpecialCase.DOUBLE_LOOP:
 
@@ -366,8 +490,8 @@ namespace Daedalus
                                 Row row = new Row(CellTemplate);
                                 populateRow(ref row, SenderType.PARSE_ROW);
 
-                                if (lua.UseRowProcessor)
-                                    lua.CallRowProcessor(FileMode.Read, row, r);
+                                if (UseRowProcessor)
+                                    ProcessRow(FileMode.Read, row, r);
 
                                 tRows.Add(row);
 
@@ -376,7 +500,7 @@ namespace Daedalus
                             }
                         }
 
-                        rows = tRows.ToArray();
+                        Rows = tRows.ToArray();
 
                         break;
                 }
@@ -388,10 +512,10 @@ namespace Daedalus
                     Row row = new Row(CellTemplate);
                     populateRow(ref row, SenderType.PARSE_ROW);
 
-                    if (lua.UseRowProcessor)
-                        lua.CallRowProcessor(FileMode.Read, row, r);
+                    if (UseRowProcessor)
+                        ProcessRow(FileMode.Read, row, r);
 
-                    rows[r] = row;
+                    Rows[r] = row;
 
                     if ((r * 100 / RowCount) != ((r - 1) * 100 / RowCount))
                         OnProgressValueChanged(new ProgressValueArgs(r));
@@ -413,9 +537,9 @@ namespace Daedalus
                     sHelper.Write(newDate);
                     sHelper.Write<string>(($"........RDB Written with Daedalus v{FileVersionInfo.GetVersionInfo("Daedalus.dll").FileVersion.Remove(0, 2)} by iSmokeDrow."), 120);
 
-                    if (lua.SpecialCase)
+                    if (IsSpecialCase)
                     {
-                        switch (lua.Case)
+                        switch (Case)
                         {
                             case SpecialCase.DOUBLE_LOOP:
                                 int pVal = 0;
@@ -423,7 +547,7 @@ namespace Daedalus
 
                                 for (int r = 0; r < RowCount; r++)
                                 {
-                                    int cVal = (int)rows[r].GetValueByFlag(FlagType.LOOP_COUNTER);
+                                    int cVal = (int)Rows[r].GetValueByFlag(FlagType.LOOP_COUNTER);
 
                                     if (pVal != cVal)
                                     {
@@ -451,9 +575,9 @@ namespace Daedalus
         {
             OnProgressMaxChanged(new ProgressMaxArgs(RowCount));
 
-            if (lua.SpecialCase)
+            if (IsSpecialCase)
             {
-                switch (lua.Case)
+                switch (Case)
                 {
                     case SpecialCase.DOUBLE_LOOP:
 
@@ -461,7 +585,7 @@ namespace Daedalus
 
                         for (int rowIdx = 0; rowIdx < RowCount; rowIdx++)
                         {
-                            Row row = rows[rowIdx];
+                            Row row = Rows[rowIdx];
                             int cVal = (int)row.GetValueByFlag(FlagType.LOOP_COUNTER);
 
                             if (pVal != cVal)
@@ -473,8 +597,8 @@ namespace Daedalus
 
                                 for (int tR = 0; tR < treeRows.Length; tR++)
                                 {
-                                    if (lua.UseRowProcessor)
-                                        lua.CallRowProcessor("write", rows[tR], rowIdx);
+                                    if (UseRowProcessor)
+                                        ProcessRow("write", Rows[tR], rowIdx);
 
                                     writeRow(treeRows[tR], SenderType.WRITE_ROW);
                                 }
@@ -490,13 +614,13 @@ namespace Daedalus
             {
                 for (int r = 0; r < RowCount; r++)
                 {
-                    Row i = rows[r];
+                    Row i = Rows[r];
                     Row o = new Row(row_Template);
 
-                    if (lua.UseRowProcessor)
+                    if (UseRowProcessor)
                     {
                         i.Clone(ref o);
-                        lua.CallRowProcessor(FileMode.Write, o, r);
+                        ProcessRow(FileMode.Write, o, r);
                     }
                     else
                         o = i;
@@ -672,7 +796,7 @@ namespace Daedalus
 
                     case CellType.TYPE_SHORT:
                         {
-                            short s = row[c] as short? ?? default(short);
+                            short s = (short)row[c];
                             sHelper.Write<short>(s);
                         }
                         break;
@@ -682,7 +806,7 @@ namespace Daedalus
 
                     case CellType.TYPE_UINT_16:
                         {
-                            ushort s = row[c] as ushort? ?? default(ushort);
+                            ushort s = (ushort)row[c];
                             sHelper.Write<ushort>(s);
                         }
                         break;
@@ -690,9 +814,9 @@ namespace Daedalus
                     case CellType.TYPE_INT:
                         goto case CellType.TYPE_INT_32;
 
-                    case CellType.TYPE_INT_32:
+                    case CellType.TYPE_INT_32: //TODO: all these shits should use tryparse
                         {
-                            int i = row[c] as int? ?? default(int);
+                            int i = Convert.ToInt32(row[c]);
                             sHelper.Write<int>(i);
                         }
                         break;
@@ -709,7 +833,7 @@ namespace Daedalus
 
                     case CellType.TYPE_LONG:
                         {
-                            long l = row[c] as long? ?? default(long);
+                            long l = (long)row[c];
                             sHelper.Write<double>(l);
                         }
                         break;
@@ -760,7 +884,7 @@ namespace Daedalus
 
                     case CellType.TYPE_SINGLE:
                         {
-                            float s = row[c] as float? ?? default(float);
+                            float s = (float)row[c];
                             sHelper.Write<float>(s);
                         }
                         break;
@@ -770,7 +894,7 @@ namespace Daedalus
 
                     case CellType.TYPE_DOUBLE:
                         {
-                            double d = row[c] as double? ?? default(double);
+                            double d = (double)row[c];
                             sHelper.Write<double>(d);
                         }
                         break;
@@ -822,7 +946,7 @@ namespace Daedalus
 
             for (int r = 0; r < RowCount; r++)
             {
-                Row row = rows[r];
+                Row row = Rows[r];
                 var v = row[key];
 
                 if ((int)v == (int)value)
@@ -836,9 +960,9 @@ namespace Daedalus
         {
             List<Row> results = new List<Row>();
 
-            for (int r = 0; r < rows.Length; r++)
+            for (int r = 0; r < Rows.Length; r++)
             {
-                Row row = rows[r];
+                Row row = Rows[r];
                 Cell cell = row.GetCell(key);
 
                 if ((int)cell.Value == value)
@@ -851,7 +975,7 @@ namespace Daedalus
         public DbCommand GenerateInsert()
         {
             DbCommand cmd = new SqlCommand();
-            string[] names = (lua.UseSqlColumns) ? lua.SqlColumns : CellNames;
+            string[] names = (UseSqlColumns) ? SqlColumns : CellNames;
             int len = names.Length;
 
             string columns = string.Empty;
@@ -861,7 +985,7 @@ namespace Daedalus
             for (int c = 0; c < len; c++)
             {
                 string val = names[c];
-                Cell cell = rows[0].GetCell(val);
+                Cell cell = Rows[0].GetCell(val);
                 CellType columnType = cell.Type;
 
                 if (cell.Visible)
@@ -960,13 +1084,5 @@ namespace Daedalus
         }
 
         #endregion
-
-        /// <summary>
-        /// Clear the stored rows.
-        /// </summary>
-        public void ClearData()
-        {
-            rows = new Row[0];
-        }
     }
 }

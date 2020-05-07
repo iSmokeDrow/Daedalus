@@ -21,6 +21,8 @@ namespace Daedalus.Structures
         /// <param name="cells">template containing a per cell schematic (MAY contain values)</param>
         public Row(Cell[] cells) { this.cells = cells; }
 
+        public Cell[] Cells => cells;
+
         /// <summary>
         /// Length of the cells collection
         /// </summary>
