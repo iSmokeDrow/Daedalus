@@ -7,7 +7,8 @@
     <StartupObject />
     <Description>Structure based RDB editing api</Description>
     <Company>Smokey Software</Company>
-    <AssemblyVersion>0.1.0.7</AssemblyVersion>
+    <AssemblyVersion>0.1.1.1</AssemblyVersion>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

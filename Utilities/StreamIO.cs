@@ -100,12 +100,12 @@ namespace Daedalus.Utilities
                     case Type _type when type == typeof(double):
                         buffer = new byte[sizeof(double)];
                         ms.Read(buffer, 0, sizeof(double));
-                        return BitConverter.ToUInt32(buffer, 0);                  
+                        return BitConverter.ToDouble(buffer, 0);                  
 
                     case Type _type when type == typeof(string):
                         buffer = new byte[length];
                         ms.Read(buffer, 0, buffer.Length);
-                        return ByteConverterExt.ToString(buffer, Encoding.Default);
+                        return ByteConverterExt.ToString(buffer, encoding);
 
                     default:
                         return null;
@@ -137,12 +137,9 @@ namespace Daedalus.Utilities
             if (type == typeof(string)) //If the value is a string we need to write it a special way
             {
                 if (length <= 0)
-                {
-                    //todo debug msg
                     length = ((string)value).Length;
-                }
 
-                byte[] b = ByteConverterExt.ToBytes(value, Encoding.Default);
+                byte[] b = ByteConverterExt.ToBytes(value, encoding);
                 ms.Write(b, 0, b.Length);
 
                 int remainder = length - b.Length;
@@ -157,7 +154,12 @@ namespace Daedalus.Utilities
                 buffer = value as byte[];
                 ms.Write(buffer, 0, buffer.Length);
             }
-            else //If the value is a simple/primitive
+            else if (type == typeof(byte))
+            {
+                buffer = new byte[1] { (byte)value };
+                ms.Write(buffer, 0, buffer.Length);
+            }
+            else //If the value is a simple/primitive || TODO: we should go before string
             {
                 buffer = BitConverter.GetBytes(value); //Convert value to bytes
                 ms.Write(buffer, 0, buffer.Length);

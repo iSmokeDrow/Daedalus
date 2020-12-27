@@ -14,7 +14,6 @@ using System.Threading.Tasks;
 
 namespace Daedalus
 {
-    //TODO: lua needs to move here!
     /// <summary>
     /// Provides low level access and manipulation of Rappelz .rdb data storage mediums
     /// </summary>
@@ -55,8 +54,14 @@ namespace Daedalus
         /// </summary>
         public Cell[] Cells(int index) => this[index].Cells;
 
+        /// <summary>
+        /// Collection of (valueless) Cell descriptions
+        /// </summary>
         public Cell[] CellTemplate => row_Template.Clone() as Cell[];
 
+        /// <summary>
+        /// Collection of Cell[] inside of Row object (valueless)
+        /// </summary>
         public Row RowTemplate => new Row(row_Template.Clone() as Cell[]);
 
         /// <summary>
@@ -67,7 +72,7 @@ namespace Daedalus
         /// <summary>
         /// Amount of Cells contained in the row_Template
         /// </summary>
-        public int CellCount => row_Template.Length;
+        public int CellCount => row_Template.Length; //TODO: bad lua syntax can cause error here! Fix it!
 
         /// <summary>
         /// Amount of Row[] being stored in rows
@@ -101,6 +106,8 @@ namespace Daedalus
         /// <param name="index">Zero-based ordinal location of the desired Row</param>
         /// <returns>Row object from rows[index] or null</returns>
         public Row this[int index] => Rows[index]; //TODO prolly gonna cause a problem
+
+        #region LUA
 
         /// <summary>
         /// Physical path to the LUA file containing structure definitions
@@ -149,8 +156,14 @@ namespace Daedalus
         /// </summary>
         public string SelectStatement => luaScript.Globals["selectStatement"].ToString();
 
+        /// <summary>
+        /// Determines if the sqlColumns property has been defined in the structure lua
+        /// </summary>
         public bool UseSqlColumns => luaScript.Globals["sqlColumns"] != null;
 
+        /// <summary>
+        /// Returns populated array of SQL column names, if defined in the structure lua
+        /// </summary>
         public string[] SqlColumns
         {
             get
@@ -171,16 +184,13 @@ namespace Daedalus
         }
 
         /// <summary>
-        /// All cell names in the row_Template
+        /// Determines if the current luaScript is a specialCase
         /// </summary>
-        public string[] CellNames => RowTemplate.CellNames;
-
-        public string[] VisibleCellNames => RowTemplate.VisibleNames; //These three need to actually use a n 'RowTemplate' complete object
-
-        public Cell[] VisibleCells => RowTemplate.VisibleCells;
-
         public bool IsSpecialCase => luaScript.Globals["specialCase"] != null;
 
+        /// <summary>
+        /// Returns the case (enum id) in the luaScript if defined
+        /// </summary>
         public SpecialCase Case
         {
             get
@@ -190,9 +200,26 @@ namespace Daedalus
             }
         }
 
+        /// <summary>
+        /// Determines if the luaScript will call the ProcessRow function (if the function has been defined in the structure lua)
+        /// </summary>
         public bool UseRowProcessor => luaScript.Globals["ProcessRow"] != null;
 
+        /// <summary>
+        /// Determines if the caller should use a lua defined header or traditional header
+        /// </summary>
         public bool UseHeader => luaScript.Globals[FieldsType.Header] != null;
+
+        #endregion
+
+        /// <summary>
+        /// All cell names in the row_Template
+        /// </summary>
+        public string[] CellNames => RowTemplate.CellNames;
+
+        public string[] VisibleCellNames => RowTemplate.VisibleNames; //These three need to actually use a n 'RowTemplate' complete object
+
+        public Cell[] VisibleCells => RowTemplate.VisibleCells;
 
         #endregion
 
@@ -209,6 +236,9 @@ namespace Daedalus
 
            Initialize();
         }
+
+        public Core(int codepage) =>
+            encoding = Encoding.GetEncoding(codepage);
 
         #endregion
 
@@ -313,10 +343,11 @@ namespace Daedalus
         /// Define the Encoding which strings will be processed by
         /// </summary>
         /// <param name="encoding">Encoding for string processing</param>
-        public void SetEncoding(Encoding encoding)
-        {
+        public void SetEncoding(Encoding encoding) =>
             this.encoding = encoding;
-        }
+
+        public void SetEncoding(int codepage) =>
+            encoding = Encoding.GetEncoding(codepage);
 
         /// <summary>
         /// Replaces stored rows object with provided rows object
@@ -334,6 +365,133 @@ namespace Daedalus
         public void ClearData()
         {
             Rows = new Row[0];
+        }
+
+        /// <summary>
+        /// Finds all elements with matching Key and Value
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="value"></param>
+        /// <returns>Populated array  of rows</returns>
+        public Row[] FindAll(string key, int value)
+        {
+            List<Row> results = new List<Row>();
+
+            for (int r = 0; r < Rows.Length; r++)
+            {
+                Row row = Rows[r];
+                Cell cell = row.GetCell(key);
+
+                if ((int)cell.Value == value)
+                    results.Add(row);
+            }
+
+            return results.ToArray();
+        }
+
+        /// <summary>
+        /// Generates a prepared parameterized query for insertion by the caller
+        /// </summary>
+        /// <returns>Prepared DbCommand (with parameters) lacking values</returns>
+        public DbCommand GenerateInsert()
+        {
+            DbCommand cmd = new SqlCommand();
+            string[] names = (UseSqlColumns) ? SqlColumns : CellNames;
+            int len = names.Length;
+
+            string columns = string.Empty;
+            string parameterStr = string.Empty;
+            List<DbParameter> parameters = new List<DbParameter>();
+
+            for (int c = 0; c < len; c++)
+            {
+                string val = names[c];
+                Cell cell = Rows[0].GetCell(val);
+                CellType columnType = cell.Type;
+
+                if (cell.Visible)
+                {
+                    columns += string.Format("[{0}]{1},", val, string.Empty);
+                    parameterStr += string.Format("@{0}{1},", val, string.Empty);
+                    SqlParameter sqlParam = new SqlParameter() { ParameterName = val };
+
+                    switch (columnType)
+                    {
+                        case CellType.TYPE_SHORT:
+                            goto case CellType.TYPE_INT_16;
+
+                        case CellType.TYPE_INT_16:
+                            sqlParam.SqlDbType = SqlDbType.SmallInt;
+                            break;
+
+                        case CellType.TYPE_USHORT:
+                            goto case CellType.TYPE_INT_16;
+
+                        case CellType.TYPE_UINT_16:
+                            goto case CellType.TYPE_INT_16;
+
+                        case CellType.TYPE_INT:
+                            goto case CellType.TYPE_INT_32;
+
+                        case CellType.TYPE_INT_32:
+                            sqlParam.SqlDbType = SqlDbType.Int;
+                            break;
+
+                        case CellType.TYPE_UINT:
+                            goto case CellType.TYPE_INT_32;
+
+                        case CellType.TYPE_UINT_32:
+                            goto case CellType.TYPE_INT_32;
+
+                        case CellType.TYPE_INT_64:
+                            sqlParam.SqlDbType = SqlDbType.BigInt;
+                            break;
+
+                        case CellType.TYPE_LONG:
+                            goto case CellType.TYPE_INT_64;
+
+                        case CellType.TYPE_BYTE:
+                            sqlParam.SqlDbType = SqlDbType.TinyInt;
+                            break;
+
+                        case CellType.TYPE_DATETIME:
+                            sqlParam.SqlDbType = SqlDbType.DateTime;
+                            break;
+
+                        case CellType.TYPE_DECIMAL:
+                            sqlParam.SqlDbType = SqlDbType.Decimal;
+                            break;
+
+                        case CellType.TYPE_FLOAT:
+                        case CellType.TYPE_FLOAT_32:
+                            goto case CellType.TYPE_SINGLE;
+
+                        case CellType.TYPE_SINGLE:
+                            sqlParam.SqlDbType = SqlDbType.Real;
+                            break;
+
+                        case CellType.TYPE_DOUBLE:
+                            sqlParam.SqlDbType = SqlDbType.Float;
+                            break;
+
+                        case CellType.TYPE_STRING:
+                            sqlParam.SqlDbType = SqlDbType.VarChar;
+                            break;
+
+                        case CellType.TYPE_STRING_BY_LEN:
+                            goto case CellType.TYPE_STRING;
+
+                        case CellType.TYPE_STRING_BY_REF:
+                            goto case CellType.TYPE_STRING;
+                    }
+
+                    parameters.Add(sqlParam as DbParameter);
+                }
+            }
+
+            cmd.CommandText = string.Format("INSERT INTO <tableName> ({0}) VALUES ({1})", columns.Remove(columns.Length - 1, 1), parameterStr.Remove(parameterStr.Length - 1, 1));
+            cmd.Parameters.AddRange(parameters.ToArray());
+            return cmd;
         }
 
         #endregion
@@ -420,8 +578,6 @@ namespace Daedalus
                 field.Flag = (FlagType)fVal;
                 field.Visible = (fieldT.Get("show").ToObject() != null) ? Convert.ToBoolean(fieldT.Get("show").Number) : true;
 
-                field.Flag = (FlagType)fieldT.Get("flag").Number;
-
                 if (field.Flag == FlagType.BIT_FLAG)
                 {
                     Table flagT = fieldT.Get("opt").Table;
@@ -439,10 +595,7 @@ namespace Daedalus
             return fields;
         }
 
-        /// <summary>
-        /// Read and store information from the header section of the rdb file. 
-        /// </summary>
-        private void parseHeader()
+        void parseHeader()
         {
             switch (headerType)
             {
@@ -464,10 +617,7 @@ namespace Daedalus
             }
         }
 
-        /// <summary>
-        /// Read and store the data contents section of the rdb file based on user provided lua structure.
-        /// </summary>
-        private void parseContents()
+        void parseContents()
         {
             Rows = new Row[RowCount];
 
@@ -501,7 +651,6 @@ namespace Daedalus
                         }
 
                         Rows = tRows.ToArray();
-
                         break;
                 }
             }
@@ -526,7 +675,7 @@ namespace Daedalus
             OnProgressValueChanged(new ProgressValueArgs(0));
         }
 
-        private void writeHeader()
+        void writeHeader()
         {
             switch (headerType)
             {
@@ -547,7 +696,8 @@ namespace Daedalus
 
                                 for (int r = 0; r < RowCount; r++)
                                 {
-                                    int cVal = (int)Rows[r].GetValueByFlag(FlagType.LOOP_COUNTER);
+                                    Row row = Rows[r];
+                                    int cVal = Convert.ToInt32(row.GetValueByFlag(FlagType.LOOP_COUNTER));
 
                                     if (pVal != cVal)
                                     {
@@ -571,7 +721,7 @@ namespace Daedalus
             }
         }
 
-        private void writeContents()
+        void writeContents()
         {
             OnProgressMaxChanged(new ProgressMaxArgs(RowCount));
 
@@ -639,7 +789,7 @@ namespace Daedalus
             OnProgressValueChanged(new ProgressValueArgs(0));
         }
 
-        private void populateRow(ref Row row, SenderType sender)
+        void populateRow(ref Row row, SenderType sender)
         {
             int count = (sender == SenderType.PARSE_HEADER) ? dHeader_Template.Length : row.Length;
 
@@ -684,7 +834,6 @@ namespace Daedalus
                         row[c] = sHelper.Read<long>();
                         break;
 
-                    //TODO: Implement TYPE_ULONG
                     //case CellType.TYPE_ULONG:
                     //    row[c] = sHelper.ReadInt64;
                     //    break;
@@ -717,7 +866,8 @@ namespace Daedalus
                                 throw new ArgumentNullException(string.Format("{0} does not have a dependency listed!", ((Cell)row[c]).Name));
 
                             BitVector32 bitVector = (BitVector32)row[dependency];
-                            row[c] = Convert.ToInt32(bitVector[1 << bitPos]);
+                            bool bitVal = bitVector[1 << bitPos];
+                            row[c] = Convert.ToInt32(bitVal);
                             break;
                         }
 
@@ -750,8 +900,7 @@ namespace Daedalus
                         break;
 
                     case CellType.TYPE_STRING:
-                        row[c] = ByteConverterExt.ToString(sHelper.Read<byte[]>(cell.Length), 
-                                                                        Encoding.Default);                     
+                        row[c] = ByteConverterExt.ToString(sHelper.Read<byte[]>(cell.Length), encoding);                     
                         break;
 
                     case CellType.TYPE_STRING_BY_LEN:
@@ -781,162 +930,168 @@ namespace Daedalus
             }
         }
 
-        private void writeRow(Row row, SenderType sender)
+        void writeRow(Row row, SenderType sender)
         {
-            int count = (sender == SenderType.WRITE_HEADER) ? dHeader_Template.Length : row.Length;
-
-            for (int c = 0; c < count; c++)
+            try
             {
-                Cell cell = (sender == SenderType.WRITE_HEADER) ? dHeader_Template[c] : row_Template[c];
+                int count = (sender == SenderType.WRITE_HEADER) ? dHeader_Template.Length : row.Length;
 
-                switch (cell.Type)
+                for (int c = 0; c < count; c++)
                 {
-                    case CellType.TYPE_INT_16:
-                        goto case CellType.TYPE_SHORT;
+                    Cell cell = (sender == SenderType.WRITE_HEADER) ? dHeader_Template[c] : row_Template[c];
 
-                    case CellType.TYPE_SHORT:
-                        {
-                            short s = (short)row[c];
-                            sHelper.Write<short>(s);
-                        }
-                        break;
+                    switch (cell.Type)
+                    {
+                        case CellType.TYPE_INT_16:
+                            goto case CellType.TYPE_SHORT;
 
-                    case CellType.TYPE_USHORT:
-                        goto case CellType.TYPE_UINT_16;
+                        case CellType.TYPE_SHORT:
+                            {
+                                short s = (short)row[c];
+                                sHelper.Write<short>(s);
+                            }
+                            break;
 
-                    case CellType.TYPE_UINT_16:
-                        {
-                            ushort s = (ushort)row[c];
-                            sHelper.Write<ushort>(s);
-                        }
-                        break;
+                        case CellType.TYPE_USHORT:
+                            goto case CellType.TYPE_UINT_16;
 
-                    case CellType.TYPE_INT:
-                        goto case CellType.TYPE_INT_32;
+                        case CellType.TYPE_UINT_16:
+                            {
+                                ushort s = (ushort)row[c];
+                                sHelper.Write<ushort>(s);
+                            }
+                            break;
 
-                    case CellType.TYPE_INT_32: //TODO: all these shits should use tryparse
-                        {
-                            int i = Convert.ToInt32(row[c]);
-                            sHelper.Write<int>(i);
-                        }
-                        break;
+                        case CellType.TYPE_INT:
+                            goto case CellType.TYPE_INT_32;
 
-                    case CellType.TYPE_UINT_32:
-                        {
-                            uint i = Convert.ToUInt32(row[c]);
-                            sHelper.Write<uint>(i);
-                        }
-                        break;
+                        case CellType.TYPE_INT_32: //TODO: all these shits should use tryparse
+                            {
+                                int i = Convert.ToInt32(row[c]);
+                                sHelper.Write<int>(i);
+                            }
+                            break;
 
-                    case CellType.TYPE_INT_64:
-                        goto case CellType.TYPE_LONG;
+                        case CellType.TYPE_UINT_32:
+                            {
+                                uint i = Convert.ToUInt32(row[c]);
+                                sHelper.Write<uint>(i);
+                            }
+                            break;
 
-                    case CellType.TYPE_LONG:
-                        {
-                            long l = (long)row[c];
-                            sHelper.Write<double>(l);
-                        }
-                        break;
+                        case CellType.TYPE_INT_64:
+                            goto case CellType.TYPE_LONG;
 
-                    //TODO: Implement TYPE_ULONG
-                    //case CellType.TYPE_ULONG:
-                    //    break;
+                        case CellType.TYPE_LONG:
+                            {
+                                long l = (long)row[c];
+                                sHelper.Write<double>(l);
+                            }
+                            break;
 
-                    case CellType.TYPE_DATETIME:
-                        {
-                            DateTime dt = (DateTime)row[c];
-                            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-                            sHelper.Write<int>(Convert.ToInt32((dt - epoch).TotalSeconds));
-                        }
-                        break;
+                        //case CellType.TYPE_ULONG:
+                        //    break;
 
-                    case CellType.TYPE_BYTE:
-                        if (cell.Length > 0)
-                        {
-                            byte[] b = new byte[cell.Length];
-                            sHelper.Write<byte[]>(b);
-                        }
-                        else
-                        {
-                            byte b = row[c] as byte? ?? default(byte);
-                            sHelper.Write<byte>(b);
-                        }
-                        break;
+                        case CellType.TYPE_DATETIME:
+                            {
+                                DateTime dt = (DateTime)row[c];
+                                var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                                sHelper.Write<int>(Convert.ToInt32((dt - epoch).TotalSeconds));
+                            }
+                            break;
 
-                    case CellType.TYPE_BIT_VECTOR:
-                        {
-                            int i = BitConverter.ToInt32(generateBitVector(row, cell.Name), 0);
-                            sHelper.Write<int>(i);
-                        }
-                        break;
+                        case CellType.TYPE_BYTE:
+                            if (cell.Length >= 2)
+                            {
+                                byte[] b = new byte[cell.Length];
+                                sHelper.Write<byte[]>(b);
+                            }
+                            else
+                            {
+                                byte b = Convert.ToByte(row[c]);
+                                sHelper.Write<byte>(b);
+                            }
+                            break;
 
-                    case CellType.TYPE_DECIMAL:
-                        decimal v0 = row[c] as decimal? ?? default(decimal);
-                        int v1 = Convert.ToInt32(v0 * 100);
-                        sHelper.Write<int>(v1);
-                        break;
+                        case CellType.TYPE_BIT_VECTOR:
+                            {
+                                int i = BitConverter.ToInt32(generateBitVector(row, cell.Name), 0);
+                                sHelper.Write<int>(i);
+                            }
+                            break;
 
-                    case CellType.TYPE_FLOAT:
-                        goto case CellType.TYPE_SINGLE;
+                        case CellType.TYPE_DECIMAL:
+                            decimal v0 = row[c] as decimal? ?? default(decimal);
+                            int v1 = Convert.ToInt32(v0 * 100);
+                            sHelper.Write<int>(v1);
+                            break;
 
-                    case CellType.TYPE_FLOAT_32:
-                        goto case CellType.TYPE_SINGLE;
+                        case CellType.TYPE_FLOAT:
+                            goto case CellType.TYPE_SINGLE;
 
-                    case CellType.TYPE_SINGLE:
-                        {
-                            float s = (float)row[c];
-                            sHelper.Write<float>(s);
-                        }
-                        break;
+                        case CellType.TYPE_FLOAT_32:
+                            goto case CellType.TYPE_SINGLE;
 
-                    case CellType.TYPE_FLOAT_64:
-                        goto case CellType.TYPE_DOUBLE;
+                        case CellType.TYPE_SINGLE:
+                            {
+                                float s = Convert.ToSingle(row[c]);
+                                sHelper.Write<float>(s);
+                            }
+                            break;
 
-                    case CellType.TYPE_DOUBLE:
-                        {
-                            double d = (double)row[c];
-                            sHelper.Write<double>(d);
-                        }
-                        break;
+                        case CellType.TYPE_FLOAT_64:
+                            goto case CellType.TYPE_DOUBLE;
 
-                    case CellType.TYPE_STRING:
-                        {
-                            Cell tCell = row.GetCell(c);
+                        case CellType.TYPE_DOUBLE:
+                            {
+                                double d = Convert.ToDouble(row[c]);
+                                sHelper.Write<double>(d);
+                            }
+                            break;
 
-                            string s = tCell.Value as string;
-                            sHelper.Write<string>(s, tCell.Length);
-                        }
-                        break;
+                        case CellType.TYPE_STRING:
+                            {
+                                Cell tCell = row.GetCell(c);
 
-                    case CellType.TYPE_STRING_BY_LEN:
-                        {
-                            Cell tCell = row.GetCell(c);
-                            string dep = tCell.Dependency;
-                            Cell dCell = row.GetCell(dep);
+                                string s = tCell.Value as string;
+                                sHelper.Write<string>(s, tCell.Length);
+                            }
+                            break;
 
-                            string s = tCell.Value as string; //TODO: update cells to be a generic class
-                            sHelper.Write<string>(s, (int)dCell.Value);
-                        }
-                        break;
+                        case CellType.TYPE_STRING_BY_LEN:
+                            {
+                                Cell tCell = row.GetCell(c);
+                                string dep = tCell.Dependency;
+                                Cell dCell = row.GetCell(dep);
 
-                    case CellType.TYPE_STRING_BY_HEADER_REF:
-                        {
-                            byte[] buffer = ByteConverterExt.ToBytes(row[c].ToString(), Encoding.Default);
-                            string refName = cell.Dependency;
-                            int remainder = Convert.ToInt32(dHeader[refName]) - buffer.Length;
-                            sHelper.Write<byte[]>(buffer);
-                            sHelper.Write<byte[]>(new byte[remainder]);
-                        }
-                        break;
+                                string s = tCell.Value as string;
+                                sHelper.Write<string>(s, (int)dCell.Value);
+                            }
+                            break;
 
-                    case CellType.TYPE_STRING_LEN:
-                        {
-                            string cellName = row.GetNameByDependency(cell.Name);
-                            int valLen = row[cellName].ToString().Length + 1;
-                            sHelper.Write<int>(valLen);
-                        }
-                        break;
-                }                   
+                        case CellType.TYPE_STRING_BY_HEADER_REF:
+                            {
+                                byte[] buffer = ByteConverterExt.ToBytes(row[c].ToString(), encoding);
+                                string refName = cell.Dependency;
+                                int remainder = Convert.ToInt32(dHeader[refName]) - buffer.Length;
+                                sHelper.Write<byte[]>(buffer);
+                                sHelper.Write<byte[]>(new byte[remainder]);
+                            }
+                            break;
+
+                        case CellType.TYPE_STRING_LEN:
+                            {
+                                string cellName = row.GetNameByDependency(cell.Name);
+                                int valLen = row[cellName].ToString().Length + 1;
+                                sHelper.Write<int>(valLen);
+                            }
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageOccured(this, new MessageArgs($"An error has occured writing row data!\nMessage: {ex.Message}\nStack-Trace: {ex.StackTrace}"));
             }
         }
 
@@ -954,122 +1109,6 @@ namespace Daedalus
             }
 
             return c;
-        }
-
-        public Row[] FindAll(string key, int value)
-        {
-            List<Row> results = new List<Row>();
-
-            for (int r = 0; r < Rows.Length; r++)
-            {
-                Row row = Rows[r];
-                Cell cell = row.GetCell(key);
-
-                if ((int)cell.Value == value)
-                    results.Add(row);
-            }
-
-            return results.ToArray();
-        }
-
-        public DbCommand GenerateInsert()
-        {
-            DbCommand cmd = new SqlCommand();
-            string[] names = (UseSqlColumns) ? SqlColumns : CellNames;
-            int len = names.Length;
-
-            string columns = string.Empty;
-            string parameterStr = string.Empty;
-            List<DbParameter> parameters = new List<DbParameter>();     
-
-            for (int c = 0; c < len; c++)
-            {
-                string val = names[c];
-                Cell cell = Rows[0].GetCell(val);
-                CellType columnType = cell.Type;
-
-                if (cell.Visible)
-                {
-                    columns += string.Format("[{0}]{1},", val, string.Empty);
-                    parameterStr += string.Format("@{0}{1},", val, string.Empty);
-                    SqlParameter sqlParam = new SqlParameter() { ParameterName = val };
-
-                    switch (columnType)
-                    {
-                        case CellType.TYPE_SHORT:
-                            goto case CellType.TYPE_INT_16;
-
-                        case CellType.TYPE_INT_16:
-                            sqlParam.SqlDbType = SqlDbType.SmallInt;
-                            break;
-
-                        case CellType.TYPE_USHORT:
-                            goto case CellType.TYPE_INT_16;
-
-                        case CellType.TYPE_UINT_16:
-                            goto case CellType.TYPE_INT_16;
-
-                        case CellType.TYPE_INT:
-                            goto case CellType.TYPE_INT_32;
-
-                        case CellType.TYPE_INT_32:
-                            sqlParam.SqlDbType = SqlDbType.Int;
-                            break;
-
-                        case CellType.TYPE_UINT:
-                            goto case CellType.TYPE_INT_32;
-
-                        case CellType.TYPE_UINT_32:
-                            goto case CellType.TYPE_INT_32;
-
-                        case CellType.TYPE_INT_64:
-                            sqlParam.SqlDbType = SqlDbType.BigInt;
-                            break;
-
-                        case CellType.TYPE_LONG:
-                            goto case CellType.TYPE_INT_64;
-
-                        case CellType.TYPE_BYTE:
-                            sqlParam.SqlDbType = SqlDbType.TinyInt;
-                            break;
-
-                        case CellType.TYPE_DATETIME:
-                            sqlParam.SqlDbType = SqlDbType.DateTime;
-                            break;
-
-                        case CellType.TYPE_DECIMAL:
-                            sqlParam.SqlDbType = SqlDbType.Decimal;
-                            break;
-
-                        case CellType.TYPE_FLOAT: case CellType.TYPE_FLOAT_32:
-                            goto case CellType.TYPE_SINGLE;
-
-                        case CellType.TYPE_SINGLE:
-                            sqlParam.SqlDbType = SqlDbType.Real;
-                            break;
-
-                        case CellType.TYPE_DOUBLE:
-                            sqlParam.SqlDbType = SqlDbType.Float;
-                            break;
-
-                        case CellType.TYPE_STRING:
-                            sqlParam.SqlDbType = SqlDbType.VarChar;
-                            break;
-
-                        case CellType.TYPE_STRING_BY_LEN:
-                            goto case CellType.TYPE_STRING;
-
-                        case CellType.TYPE_STRING_BY_REF:
-                            goto case CellType.TYPE_STRING;
-                    }
-                    
-                    parameters.Add(sqlParam as DbParameter);
-                }
-            }      
-
-            cmd.CommandText = string.Format("INSERT INTO <tableName> ({0}) VALUES ({1})", columns.Remove(columns.Length - 1, 1), parameterStr.Remove(parameterStr.Length - 1, 1));
-            cmd.Parameters.AddRange(parameters.ToArray());
-            return cmd;
         }
 
         byte[] generateBitVector(Row row, string fieldName)

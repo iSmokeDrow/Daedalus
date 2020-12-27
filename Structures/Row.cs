@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using Daedalus.Enums;
@@ -8,7 +9,7 @@ namespace Daedalus.Structures
     /// <summary>
     /// Storage medium for a 'row' of data loaded from an .rdb file
     /// </summary>
-    public struct Row
+    public struct Row : IEnumerable<Cell>
     {
         /// <summary>
         /// Collection of cell descriptors and values.
@@ -369,6 +370,10 @@ namespace Daedalus.Structures
             for (int i = 0; i < output.Length; i++)
                 output[i] = cells[i].Value;
         }
+
+        public IEnumerator<Cell> GetEnumerator() => ((IEnumerable<Cell>)Cells).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<Cell>)Cells).GetEnumerator();
 
         /// <summary>
         /// Amount of fields with the type BIT_FROM_VECTOR
